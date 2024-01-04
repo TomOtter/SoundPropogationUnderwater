@@ -26,12 +26,29 @@ fn calcRayPath(initialAngle :f64, dy: f64) -> ([f64;SIZE],[f64;SIZE]) {
     let mut ray_ypositions: [f64;SIZE] = [0.0;SIZE];
     let mut ray_directions: [f64;SIZE] = [0.0;SIZE];
 
-    ray_ypositions[0] = 100.0;
-    ray_directions[0] = initialAngle;
-
+    let mut angle: f64 = initialAngle;
     let mut stepVector: f64 = dy;
 
+    if initialAngle > PI/2.0 {
+        stepVector = -1.0 * stepVector;
+        angle = (PI - initialAngle) / 2.0
+    }
+    else if initialAngle < -PI/2.0 {
+        stepVector = -1.0 * stepVector;
+        angle = (-PI - initialAngle) / 2.0
+    }
+
+
+
+    ray_ypositions[0] = 100.0;
+    ray_directions[0] = angle;
+
+
+    
+
     for i in 0..SIZE-1 {
+
+
         ray_xpositions[i+1] = ray_xpositions[i] + stepVector * ray_directions[i].tan();
         ray_ypositions[i+1] = ray_ypositions[i] + stepVector;
 
@@ -59,7 +76,7 @@ fn calcRayPath(initialAngle :f64, dy: f64) -> ([f64;SIZE],[f64;SIZE]) {
     (ray_xpositions,ray_ypositions)
 }
 
-const SIZE: usize = 8000;
+const SIZE: usize = 800;
 
 fn main() -> std::io::Result<()> {
 
@@ -70,8 +87,12 @@ fn main() -> std::io::Result<()> {
 
     let mut output : String = "\n".to_string();
 
-    for i in 1..20{
-        let angle = ((i) as f64)  * PI/40.0;
+    for i in -40..41{
+        let angle = ((i) as f64)  * PI/40.00 ;
+        if angle.sin().abs() == 1.0 {
+            continue;
+        }
+
         let xpos : [f64;SIZE];
         let ypos : [f64;SIZE];
         (xpos,ypos) = calcRayPath(angle,dy);
@@ -81,14 +102,16 @@ fn main() -> std::io::Result<()> {
         }
 
     
+
+    
     
 
     }
-let real_output = output.as_str();
+    let real_output = output.as_str();
 
-let mut file = File::create(format!("dataset{}.txt",1))?;
-file.write_all(real_output.as_bytes())?;
-Ok(())
+    let mut file = File::create(format!("dataset{}.txt",1))?;
+    file.write_all(real_output.as_bytes())?;
+    Ok(())
     
 }
 
