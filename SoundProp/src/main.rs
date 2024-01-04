@@ -1,69 +1,94 @@
 use std::fs::File;
 use std::io::prelude::*;
 
+pub const PI: f64 = 3.14159265358979323846264338327950288_f64; // 3.1415926535897931f64
 
+fn rIndex(depth: f64) -> f64 {
+    let z: f64 = depth;
+    let result: f64;
+    if z < 0.0 {
+        result = 1000.0 / 343.0;
+    }
+    else if z > 4000.0 {
+        result = 1000.0 / 4343.0;
+    }
+    else{
+        result = 1000.0 / (1521.45 - 0.0666*z + 0.0000343*z*z);
+    }
+    result
+}
+
+
+
+fn calcRayPath(initialAngle :f64, dy: f64) -> ([f64;SIZE],[f64;SIZE]) {
+
+    let mut ray_xpositions: [f64;SIZE] = [0.0;SIZE];
+    let mut ray_ypositions: [f64;SIZE] = [0.0;SIZE];
+    let mut ray_directions: [f64;SIZE] = [0.0;SIZE];
+
+    ray_ypositions[0] = 100.0;
+    ray_directions[0] = initialAngle;
+
+    let mut stepVector: f64 = dy;
+
+    for i in 0..SIZE-1 {
+        ray_xpositions[i+1] = ray_xpositions[i] + stepVector * ray_directions[i].tan();
+        ray_ypositions[i+1] = ray_ypositions[i] + stepVector;
+
+        let depth: f64 = ray_ypositions[i];
+
+        if rIndex(depth + stepVector) < rIndex(depth) {
+            let criticalAngle : f64 = (rIndex(depth + stepVector)/rIndex(depth)).asin();
+            if ray_directions[i].abs() > criticalAngle.abs() {
+                ray_directions[i+1] = -1.0 * ray_directions[i];
+                stepVector = stepVector * -1.0;
+            }
+            else {
+                let preangle = rIndex(depth)/rIndex(depth+stepVector) * ray_directions[i].sin();
+                ray_directions[i+1] = preangle.asin();
+            }
+        }
+        else {
+            let preangle = rIndex(depth)/rIndex(depth+stepVector) * ray_directions[i].sin();
+            ray_directions[i+1] = preangle.asin();
+        }
+
+
+    }
+
+    (ray_xpositions,ray_ypositions)
+}
+
+const SIZE: usize = 8000;
 
 fn main() -> std::io::Result<()> {
 
-    const SIZE: usize = 200;
-    let mut pressuresOld: [f64;SIZE] = [0.0;SIZE]; //sea pressure is 10051.8 Pa
-    let mut pressuresCurrent: [f64;SIZE] = [0.0;SIZE];
-    let mut pressuresNew: [f64;SIZE] = [0.0;SIZE];
+    
 
-    let speed: f64 = 1.0; 
-
-    let maxTime = 300;
-
-    let dt: f64 = 1.0;
-    let dx: f64 = 1.0;
-
-    let v: f64 = 0.0;
-
-    let mut p : f64;
-
-    for x in 1 .. (SIZE - 1) {
-        let a: f64 = x as f64;
-        pressuresOld[x] = 1.0 * (-1.0 * (a - 100.0)*(a-100.0)/10.0).exp();
-        //pressuresOld[x] = 10000.0 * (a/20.0).sin()
-
-    }
-
-
-
-    for x in 1 .. (SIZE - 1) {
-        pressuresCurrent[x] = pressuresOld[x] + v * dt + 0.5 * ((dt * dt)/(dx * dx)) * speed * speed * (pressuresOld[x + 1] - 2.0 * pressuresOld[x] + pressuresOld[x-1])
-    }
-    pressuresCurrent[0] = 0.0;   //boundary condition 
-    pressuresCurrent[SIZE - 1] = 0.0;
-
+    
+    let dy: f64 = 10.0;
 
     let mut output : String = "\n".to_string();
 
+    for i in 1..20{
+        let angle = ((i) as f64)  * PI/40.0;
+        let xpos : [f64;SIZE];
+        let ypos : [f64;SIZE];
+        (xpos,ypos) = calcRayPath(angle,dy);
 
-    for t in 0 .. (maxTime) {
-        for x in 1 .. (SIZE - 1) {  //Can not be end nodes as they have only one neighbor
-            pressuresNew[x] = ((dt * dt)/(dx * dx)) * speed * speed * (pressuresCurrent[x + 1] - (2.0 * pressuresCurrent[x]) + (pressuresCurrent[x-1])) - pressuresOld[x] + (2.0 * pressuresCurrent[x]);
+        for i in 0..xpos.len(){
+            output = output + &xpos[i].to_string() + " " + &ypos[i].to_string() + "\n";
         }
-        pressuresNew[0] = 0.0;   //boundary condition 
-        pressuresNew[SIZE - 1] = 0.0;
 
-
-       if t % 1 == 0 {
-           for x in 0 .. (SIZE) {
-               output = output + &x.to_string() + " " + &(pressuresNew[x].to_string()) + "\n" ;
-           }
-           
-           output = output + "\n" ;
-       }
-
-       pressuresOld = pressuresCurrent;
-       pressuresCurrent = pressuresNew;
+    
+    
 
     }
+let real_output = output.as_str();
 
-    let real_output = output.as_str();
-
-    let mut file = File::create("dataset.txt")?;
-    file.write_all(real_output.as_bytes())?;
-    Ok(())
+let mut file = File::create(format!("dataset{}.txt",1))?;
+file.write_all(real_output.as_bytes())?;
+Ok(())
+    
 }
+
