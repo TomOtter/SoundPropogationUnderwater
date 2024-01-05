@@ -31,13 +31,12 @@ fn calcRayPath(initialAngle :f64, dy: f64) -> ([f64;SIZE],[f64;SIZE]) {
 
     if initialAngle > PI/2.0 {
         stepVector = -1.0 * stepVector;
-        angle = (PI - initialAngle) / 2.0
+        angle = (PI - initialAngle)
     }
     else if initialAngle < -PI/2.0 {
         stepVector = -1.0 * stepVector;
-        angle = (-PI - initialAngle) / 2.0
+        angle = (-PI - initialAngle)
     }
-
 
 
     ray_ypositions[0] = 100.0;
@@ -87,8 +86,8 @@ fn main() -> std::io::Result<()> {
 
     let mut output : String = "\n".to_string();
 
-    for i in -40..41{
-        let angle = ((i) as f64)  * PI/40.00 ;
+    for i in -120..121{
+        let angle = ((i) as f64)  * PI/120.00 ;
         if angle.sin().abs() == 1.0 {
             continue;
         }
