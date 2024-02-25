@@ -1,23 +1,62 @@
 use std::fs::File;
 use std::io::prelude::*;
 
+
+mod ray_trace {
+    pub struct Ray {
+        pub angle: f64,
+        pub x_pos: f64,
+        pub y_pos: f64,
+        pub intensity: f64,
+        pub stepVector: f64,
+
+
+    }
+
+    impl Ray {
+        pub fn step(&mut self) {
+            let new_x_pos = self.x_pos + self.stepVector * self.angle.tan();
+            let new_y_pos = self.y_pos + self.stepVector;
+
+            if material_speed(new_y_pos) > material_speed(self.y_pos) {
+                let criticalAngle : f64 = (material_speed(self.y_pos)/material_speed(new_y_pos)).asin();
+                if self.angle.abs() > criticalAngle.abs() {
+                    self.angle = -1.0 * self.angle;
+                    self.stepVector = self.stepVector * -1.0;
+                }
+                // Reflects the ray if its angle with the normal exceeds the critical angle
+            }
+
+            let preangle = material_speed(new_y_pos)/material_speed(self.y_pos) * self.angle.sin();
+            self.angle = preangle.asin();
+            self.x_pos = new_x_pos;
+            self.y_pos = new_y_pos;
+            
+        }
+    }
+
+
+
+    fn material_speed(depth: f64) -> f64 {
+        let y: f64 = depth;
+        let result: f64;
+        if y < 0.0 {
+            result = 343.0;
+        }
+        else if y > 7000.0 {
+            result = 4343.0;
+        }
+        else{ 
+            result = (1521.45 - 0.0666*y + 0.0000343*y*y);
+        }
+        result
+    }
+}
+
+
 pub const PI: f64 = 3.14159265358979323846264338327950288_f64;
 
-fn material_speed(depth: f64) -> f64 {
-    let y: f64 = depth;
-    let result: f64;
-    if y < 0.0 {
-        result = 343.0;
-    }
-    else if y > 7000.0 {
-        result = 4343.0;
-    }
-    else{
-        // result = (1449.2 + 4.6 * z - 0.055 * z * z + 0.00029*z*z*z);   
-        result = (1521.45 - 0.0666*y + 0.0000343*y*y);
-    }
-    result
-}
+
 
 
 // Determines the speed of the ray depepndant on the depth 'z'.
@@ -57,59 +96,40 @@ fn calcRayPath(initialAngle :f64, dy: f64) -> ([f64;SIZE],[f64;SIZE]) {
 
     // Sets the starting position and angle of each ray
 
+    let mut ray1 = ray_trace::Ray {
+        angle: angle,
+        x_pos: ray_xpositions[0],
+        y_pos: ray_ypositions[0],
+        intensity: 1.0,
+        stepVector: stepVector,
+    };
+
 
     for i in 0..SIZE-1 {
 
+        ray1.step();
 
-        ray_xpositions[i+1] = ray_xpositions[i] + stepVector * ray_directions[i].tan();
-        ray_ypositions[i+1] = ray_ypositions[i] + stepVector;
+        ray_xpositions[i+1] = ray1.x_pos;
+        ray_ypositions[i+1] = ray1.y_pos;
         //Calculates the new position of the ray after a step is taken
-
-        let depth: f64 = ray_ypositions[i];
-
-        if material_speed(depth + stepVector) > material_speed(depth) {
-            let criticalAngle : f64 = (material_speed(depth)/material_speed(depth + stepVector)).asin();
-            if ray_directions[i].abs() > criticalAngle.abs() {
-                ray_directions[i+1] = -1.0 * ray_directions[i];
-                stepVector = stepVector * -1.0;
-            }
-            // Reflects the ray if its angle with the normal exceeds the critical angle
-                
-            else {
-                let preangle = material_speed(depth + stepVector)/material_speed(depth) * ray_directions[i].sin();
-                ray_directions[i+1] = preangle.asin();
-            }
-        }
-        else {
-            let preangle = material_speed(depth + stepVector)/material_speed(depth) * ray_directions[i].sin();
-            ray_directions[i+1] = preangle.asin();
-        }
-
-        // Refracts the ray if its angle with the normal does not exceed the critical angle
-      
     }
 
     (ray_xpositions,ray_ypositions)
     // Outputs the x-y positions of the ray for each iterative step
 }
 
-const SIZE: usize = 20;
+const SIZE: usize = 200;
 
 fn main() -> std::io::Result<()> {
     
 
-    let dy: f64 = 1.0;
-
-    let mut output : String = "\n".to_string();
-
-    for i in -180..1{
-        let mut angle = ((i) as f64) * 2.0 * (PI / 180.0) ;
-
     let dy: f64 = 10.0;
+
+
     //Sets step size
     
     let mut output : String = "\n".to_string();
-
+    //-120..121
     for i in -120..121{
         let angle = ((i) as f64)  * PI/120.00 ;
         // Sets the initial angle of the ray. The initial angle of each ray increases by pi/120 in each iteration between +/- pi.
