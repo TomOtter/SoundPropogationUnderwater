@@ -8,7 +8,7 @@ pub struct Ray {
         pub stepVector: f64,
 
 
-    }
+    } // Defines the properties of each ray.
 
     impl Ray {
         pub fn step(&mut self) {
@@ -21,7 +21,7 @@ pub struct Ray {
                     self.angle = -1.0 * self.angle;
                     self.stepVector = self.stepVector * -1.0;
                 }
-                // Reflects the ray if its angle with the normal exceeds the critical angle
+                // Reflects the ray if its angle with the normal exceeds the critical angle.
             }
 
             let preangle = material_speed(new_y_pos)/material_speed(self.y_pos) * self.angle.sin();
@@ -29,7 +29,7 @@ pub struct Ray {
             self.x_pos = new_x_pos;
             self.y_pos = new_y_pos;
             
-        }
+        } // Calculates the new angle and position of the ray after one step is taken.
 
 
         pub fn initialise(&mut self, dy: f64) {
@@ -58,7 +58,7 @@ pub struct Ray {
 
             self.stepVector = stepVector;
             self.angle = angle;
-        }
+        } // Bounds the initial angle of the ray between 0 and pi rads (for maths purposes). Also converts the step to show downwards (-) or upwards (+) motion.
     }
 
 
@@ -74,6 +74,6 @@ fn material_speed(depth: f64) -> f64 {
     }
     else{ 
         result = (1521.45 - 0.0666*y + 0.0000343*y*y);
-    }
+    } // Calculates the speed of sound in the respective material.
     result
 }
