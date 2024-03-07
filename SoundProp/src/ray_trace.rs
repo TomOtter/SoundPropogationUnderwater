@@ -58,7 +58,7 @@ pub struct Ray {
 
             self.stepVector = stepVector;
             self.angle = angle;
-        } // Bounds the initial angle of the ray between 0 and pi rads (for maths purposes). Also converts the step to show downwards (-) or upwards (+) motion.
+        } // Bounds the initial angle of the ray between +/- pi/2 rads (for maths purposes). Also converts the step to show downwards (-) or upwards (+) motion.
     }
 
 
