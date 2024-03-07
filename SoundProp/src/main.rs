@@ -3,16 +3,10 @@ use std::io::prelude::*;
 
 
 mod ray_trace;
+// Inputs our 'ray_trace' module to this file.
 
 
 pub const PI: f64 = 3.14159265358979323846264338327950288_f64;
-
-
-
-
-// Determines the speed of the ray depepndant on the depth 'z'.
-// z > 0 -> air,   0 > z > 4000 -> water,   z < 4000 -> sea floor 
-
 
 
 fn calcRayPath(initialAngle :f64, dy: f64) -> ([f64;SIZE],[f64;SIZE]) {
@@ -21,14 +15,11 @@ fn calcRayPath(initialAngle :f64, dy: f64) -> ([f64;SIZE],[f64;SIZE]) {
     let mut ray_ypositions: [f64;SIZE] = [0.0;SIZE];
     let mut ray_directions: [f64;SIZE] = [0.0;SIZE];
 
-
-
-
-    // Bounds the angle of the ray between +/- pi/2 from the normal and flips the direction of the step vector.
+    // Defines an array for all of the angles and positions of a single ray
 
     ray_ypositions[0] = 1200.0;
 
-    // Sets the starting position and angle of each ray
+    // Sets initial depth of the point source
 
     let mut ray1 = ray_trace::Ray {
         angle: initialAngle,
@@ -36,7 +27,7 @@ fn calcRayPath(initialAngle :f64, dy: f64) -> ([f64;SIZE],[f64;SIZE]) {
         y_pos: ray_ypositions[0],
         intensity: 1.0,
         stepVector: 1.0,
-    };
+    }; // Defines the initial values of a ray under the ray_trace module
 
     ray1.initialise(dy);
     ray_directions[0] = ray1.angle;
@@ -61,8 +52,7 @@ fn main() -> std::io::Result<()> {
     
 
     let dy: f64 = 100.0;
-
-
+    
     //Sets step size
     
     let mut output : String = "\n".to_string();
