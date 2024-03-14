@@ -17,7 +17,7 @@ fn calcRayPath(initial_angle :f64, dy: f64) -> ([f64;SIZE],[f64;SIZE]) {
 
     // Defines an array for all of the angles and positions of a single ray
 
-    ray_ypositions[0] = 1200.0;
+    ray_ypositions[0] = 100.0;
 
     // Sets initial depth of the point source
 
@@ -26,7 +26,8 @@ fn calcRayPath(initial_angle :f64, dy: f64) -> ([f64;SIZE],[f64;SIZE]) {
         x_pos: ray_xpositions[0],
         y_pos: ray_ypositions[0],
         intensity: 1.0,
-        step_vector: 1.0,
+        stepVector: 1.0,
+        frequency: 20.0,
     }; // Defines the initial values of a ray under the ray_trace module
 
     ray1.initialise(dy);
@@ -46,12 +47,12 @@ fn calcRayPath(initial_angle :f64, dy: f64) -> ([f64;SIZE],[f64;SIZE]) {
     // Outputs the x-y positions of the ray for each iterative step
 }
 
-const SIZE: usize = 2000;
+const SIZE: usize = 200;
 
 fn main() -> std::io::Result<()> {
     
 
-    let dy: f64 = 100.0;
+    let dy: f64 = 10.0;
     
     //Sets step size
     
