@@ -5,21 +5,21 @@ pub struct Ray {
         pub x_pos: f64,
         pub y_pos: f64,
         pub intensity: f64,
-        pub stepVector: f64,
+        pub step_vector: f64,
 
 
     } // Defines the properties of each ray.
 
     impl Ray {
         pub fn step(&mut self) {
-            let new_x_pos = self.x_pos + self.stepVector * self.angle.tan();
-            let new_y_pos = self.y_pos + self.stepVector;
+            let new_x_pos = self.x_pos + self.step_vector * self.angle.tan();
+            let new_y_pos = self.y_pos + self.step_vector;
 
             if material_speed(new_y_pos) > material_speed(self.y_pos) {
-                let criticalAngle : f64 = (material_speed(self.y_pos)/material_speed(new_y_pos)).asin();
-                if self.angle.abs() > criticalAngle.abs() {
+                let critical_angle : f64 = (material_speed(self.y_pos)/material_speed(new_y_pos)).asin();
+                if self.angle.abs() > critical_angle.abs() {
                     self.angle = -1.0 * self.angle;
-                    self.stepVector = self.stepVector * -1.0;
+                    self.step_vector = self.step_vector * -1.0;
                 }
                 // Reflects the ray if its angle with the normal exceeds the critical angle.
             }
@@ -34,29 +34,29 @@ pub struct Ray {
 
         pub fn initialise(&mut self, dy: f64) {
 
-            let initialAngle = self.angle;
+            let initial_angle = self.angle;
 
-            let mut angle: f64 = initialAngle;
-            let mut stepVector: f64 = dy;
+            let mut angle: f64 = initial_angle;
+            let mut step_vector: f64 = dy;
 
-            if initialAngle > PI/2.0 {
-                stepVector = -1.0 * dy;
-                angle = -1.0 * (PI - initialAngle)
+            if initial_angle > PI/2.0 {
+                step_vector = -1.0 * dy;
+                angle = -1.0 * (PI - initial_angle)
             }
-            else if initialAngle < -PI/2.0 {
-                stepVector = -1.0 * dy;
-                angle = -1.0 * (-PI - initialAngle)
+            else if initial_angle < -PI/2.0 {
+                step_vector = -1.0 * dy;
+                angle = -1.0 * (-PI - initial_angle)
             }
-            if initialAngle > 3.0 * PI/2.0 {
-                stepVector = dy;
-                angle = 1.0 * (3.0 * PI/2.0 - initialAngle)
+            if initial_angle > 3.0 * PI/2.0 {
+                step_vector = dy;
+                angle = 1.0 * (3.0 * PI/2.0 - initial_angle)
             }
-            else if initialAngle < -3.0 * PI/2.0 {
-                stepVector = dy;
-                angle = 1.0 * (-3.0 * PI/2.0 - initialAngle)
+            else if initial_angle < -3.0 * PI/2.0 {
+                step_vector = dy;
+                angle = 1.0 * (-3.0 * PI/2.0 - initial_angle)
             }
 
-            self.stepVector = stepVector;
+            self.step_vector = step_vector;
             self.angle = angle;
         } // Bounds the initial angle of the ray between +/- pi/2 rads (for maths purposes). Also converts the step to show downwards (-) or upwards (+) motion.
     }

@@ -9,7 +9,7 @@ mod ray_trace;
 pub const PI: f64 = 3.14159265358979323846264338327950288_f64;
 
 
-fn calcRayPath(initialAngle :f64, dy: f64) -> ([f64;SIZE],[f64;SIZE]) {
+fn calcRayPath(initial_angle :f64, dy: f64) -> ([f64;SIZE],[f64;SIZE]) {
 
     let mut ray_xpositions: [f64;SIZE] = [0.0;SIZE];
     let mut ray_ypositions: [f64;SIZE] = [0.0;SIZE];
@@ -22,11 +22,11 @@ fn calcRayPath(initialAngle :f64, dy: f64) -> ([f64;SIZE],[f64;SIZE]) {
     // Sets initial depth of the point source
 
     let mut ray1 = ray_trace::Ray {
-        angle: initialAngle,
+        angle: initial_angle,
         x_pos: ray_xpositions[0],
         y_pos: ray_ypositions[0],
         intensity: 1.0,
-        stepVector: 1.0,
+        step_vector: 1.0,
     }; // Defines the initial values of a ray under the ray_trace module
 
     ray1.initialise(dy);
