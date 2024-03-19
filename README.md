@@ -4,4 +4,4 @@ The results of our code have no been tested against any real world data and shou
 
 
 
-![Visualization of code](main/simulationFixedScale.gif)
+![Visualization of code](simulationFixedScale.gif)
