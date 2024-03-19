@@ -4,4 +4,4 @@ The results of our code have no been tested against any real world data and shou
 
 
 
-![alt text]([http://url/to/img.png](https://github.com/TomOtter/SoundPropogationUnderwater/blob/main/simulationFixedScale.gif)https://github.com/TomOtter/SoundPropogationUnderwater/blob/main/simulationFixedScale.gif)
+![Visualization of code](main/simulationFixedScale.gif)
