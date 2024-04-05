@@ -3,17 +3,32 @@ use std::io::prelude::*;
 
 
 mod ray_trace;
+mod user_design;
 // Inputs our 'ray_trace' module to this file.
+
+// use crate::ray_trace::material_speed;
 
 
 pub const PI: f64 = 3.14159265358979323846264338327950288_f64;
 
 
-fn calcRayPath(initial_angle :f64, dy: f64) -> ([f64;SIZE],[f64;SIZE]) {
+
+
+let source1 = user_design::Source {
+
+}
+
+
+
+
+
+
+
+
+fn calc_ray_path(initial_angle :f64, dy: f64) -> ([f64;SIZE],[f64;SIZE]) {
 
     let mut ray_xpositions: [f64;SIZE] = [0.0;SIZE];
     let mut ray_ypositions: [f64;SIZE] = [0.0;SIZE];
-    let mut ray_directions: [f64;SIZE] = [0.0;SIZE];
 
     // Defines an array for all of the angles and positions of a single ray
 
@@ -26,15 +41,16 @@ fn calcRayPath(initial_angle :f64, dy: f64) -> ([f64;SIZE],[f64;SIZE]) {
         x_pos: ray_xpositions[0],
         y_pos: ray_ypositions[0],
         intensity: 1.0,
-        stepVector: 1.0,
+        step_vector: dy,
         frequency: 20.0,
     }; // Defines the initial values of a ray under the ray_trace module
 
     ray1.initialise(dy);
-    ray_directions[0] = ray1.angle;
 
 
     for i in 0..SIZE-1 {
+
+        
 
         ray1.step();
 
@@ -52,11 +68,14 @@ const SIZE: usize = 200;
 fn main() -> std::io::Result<()> {
     
 
-    let dy: f64 = 10.0;
+    let dy: f64 = 0.01;
     
     //Sets step size
+
+    let mut xoutputs : [[f64;SIZE];241] = [[0.0;SIZE];241];
+    let mut youtputs : [[f64;SIZE];241] = [[0.0;SIZE];241];
     
-    let mut output : String = "\n".to_string();
+    
     //-120..121
     for i in -120..121{
         let angle = ((i) as f64)  * PI/120.00 ;
@@ -67,26 +86,49 @@ fn main() -> std::io::Result<()> {
         }
         //Temporary fix to skip values for the angle which would produce undefined values. These arise when these specific angles are used in a tan function (line 52)
 
+
+
         let xpos : [f64;SIZE];
         let ypos : [f64;SIZE];
-        (xpos,ypos) = calcRayPath(angle,dy);
+        (xpos,ypos) = calc_ray_path(angle,dy);
         // Determines the path of the ray, storing its x positions as 'xpos' and y positions as 'ypos'
 
-        for i in 0..xpos.len(){
-            output = output + &xpos[i].to_string() + " " + &(-1.0 * ypos[i]).to_string() + "\n";
-        }
+
+        let index: usize = (i + 120 as i32) as usize;
+
+        xoutputs[index] = xpos;
+        youtputs[index] = ypos; 
+    
 
         // Adds the positions of the ray to the 'output' variable, which also starts a new line for the positions of the next ray.
-    
-
-    
     }
-    let real_output = output.as_str();
 
-    let mut file = File::create(format!("dataset{}.txt",1))?;
-    file.write_all(real_output.as_bytes())?;
+
+    let mut output : String = "\n".to_string();
+
+
+    
+    for j in 0..xoutputs[0].len() {
+        for i in 0..241 {
+
+            let xpos : f64 = xoutputs[i][j];
+            let ypos : f64 = youtputs[i][j];
+            output = output + &xpos.to_string() + " " + &(-1.0 * ypos).to_string() + "\n";
+
+        }
+        let real_output = output.as_str();
+        let mut file = File::create(format!("dataset{}.txt",j))?;
+        file.write_all(real_output.as_bytes())?;
+        output = "\n".to_string();
+        
+    }
+
     Ok(())
-    // Outputs the positions of the rays into a .txt data file
     
 }
 
+
+
+// fn print_type_of<T>(_: &T) {
+//     println!("{}", std::any::type_name::<T>())
+// }

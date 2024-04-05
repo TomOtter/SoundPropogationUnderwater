@@ -1,6 +1,8 @@
 
-cd ./Documents/GroupProj/SoundProp
+cd ./Documents/GroupProj/
 
-for /L %%N in (1,1,11) do gnuplot -e 'ARG1=value' %%N
+FOR /L %%N in (1,1,199) DO gnuplot -c imageScript1D.gp  %%N 
+
+
 
 pause

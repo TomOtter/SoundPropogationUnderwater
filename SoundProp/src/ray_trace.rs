@@ -1,69 +1,74 @@
 pub const PI: f64 = 3.14159265358979323846264338327950288_f64;
 
+
+
+
+
 pub struct Ray {
-        pub angle: f64,
-        pub x_pos: f64,
-        pub y_pos: f64,
-        pub intensity: f64,
-        pub stepVector: f64,
-        pub frequency: f64,
+    pub angle: f64,
+    pub x_pos: f64,
+    pub y_pos: f64,
+    pub intensity: f64,
+    pub step_vector: f64,
+    pub frequency: f64,
 
 
-    } // Defines the properties of each ray.
+} // Defines the properties of each ray.
 
-    impl Ray {
-        pub fn step(&mut self) {
-            let new_x_pos = self.x_pos + self.stepVector * self.angle.tan();
-            let new_y_pos = self.y_pos + self.stepVector;
+impl Ray {
+    pub fn step(&mut self) {
 
-            if material_speed(new_y_pos, new_x_pos) > material_speed(self.y_pos, self.x_pos) {
-                let criticalAngle : f64 = (material_speed(self.y_pos, self.x_pos)/material_speed(new_y_pos, new_x_pos)).asin();
-                if self.angle.abs() > criticalAngle.abs() {
-                    self.angle = -1.0 * self.angle;
-                    self.stepVector = self.stepVector * -1.0;
-                }
-                // Reflects the ray if its angle with the normal exceeds the critical angle.
+        let new_x_pos = self.x_pos + self.step_vector * material_speed(self.y_pos,self.x_pos) * self.angle.sin();
+        let new_y_pos = self.y_pos + self.step_vector * material_speed(self.y_pos,self.x_pos) * self.angle.cos();
+
+        if material_speed(new_y_pos, new_x_pos) > material_speed(self.y_pos, self.x_pos) {
+            let critical_angle : f64 = (material_speed(self.y_pos, self.x_pos)/material_speed(new_y_pos, new_x_pos)).asin();
+            if self.angle.abs() > critical_angle.abs() {
+                self.angle = -1.0 * self.angle;
+                self.step_vector = self.step_vector * -1.0;
             }
+            // Reflects the ray if its angle with the normal exceeds the critical angle.
+        }
 
-            let preangle = material_speed(new_y_pos, new_x_pos)/material_speed(self.y_pos, self.x_pos) * self.angle.sin();
-            self.angle = preangle.asin();
-            self.x_pos = new_x_pos;
-            self.y_pos = new_y_pos;
+        let preangle = material_speed(new_y_pos, new_x_pos)/material_speed(self.y_pos, self.x_pos) * self.angle.sin();
+        self.angle = preangle.asin();
+        self.x_pos = new_x_pos;
+        self.y_pos = new_y_pos;
 
-            let salinity = 35.0;
-            self.intensity = 1.0 - calculate_absorption(self.frequency, temperature_at_depth(self.y_pos), salinity, self.y_pos)
-            
-        } // Calculates the new angle and position of the ray after one step is taken.
+        let salinity = 35.0;
+        self.intensity = 1.0 - calculate_absorption(self.frequency, temperature_at_depth(self.y_pos), salinity, self.y_pos)
+        
+} // Calculates the new angle and position of the ray after one step is taken.
 
 
-        pub fn initialise(&mut self, dy: f64) {
+    pub fn initialise(&mut self, dy: f64) {
 
-            let initialAngle = self.angle;
+        let initial_angle = self.angle;
 
-            let mut angle: f64 = initialAngle;
-            let mut stepVector: f64 = dy;
+        let mut angle: f64 = initial_angle;
+        let mut step_vector: f64 = dy;
 
-            if initialAngle > PI/2.0 {
-                stepVector = -1.0 * dy;
-                angle = -1.0 * (PI - initialAngle)
-            }
-            else if initialAngle < -PI/2.0 {
-                stepVector = -1.0 * dy;
-                angle = -1.0 * (-PI - initialAngle)
-            }
-            if initialAngle > 3.0 * PI/2.0 {
-                stepVector = dy;
-                angle = 1.0 * (3.0 * PI/2.0 - initialAngle)
-            }
-            else if initialAngle < -3.0 * PI/2.0 {
-                stepVector = dy;
-                angle = 1.0 * (-3.0 * PI/2.0 - initialAngle)
-            }
+        if initial_angle > PI/2.0 {
+            step_vector = -1.0 * dy;
+            angle = -1.0 * (PI - initial_angle)
+        }
+        else if initial_angle < -PI/2.0 {
+            step_vector = -1.0 * dy;
+            angle = -1.0 * (-PI - initial_angle)
+        }
+        if initial_angle > 3.0 * PI/2.0 {
+            step_vector = dy;
+            angle = 1.0 * (3.0 * PI/2.0 - initial_angle)
+        }
+        else if initial_angle < -3.0 * PI/2.0 {
+            step_vector = dy;
+            angle = 1.0 * (-3.0 * PI/2.0 - initial_angle)
+        }
 
-            self.stepVector = stepVector;
-            self.angle = angle;
-        } // Bounds the initial angle of the ray between +/- pi/2 rads (for maths purposes). Also converts the step to show downwards (-) or upwards (+) motion.
-    }
+        self.step_vector = step_vector;
+        self.angle = angle;
+    } // Bounds the initial angle of the ray between +/- pi/2 rads (for maths purposes). Also converts the step to show downwards (-) or upwards (+) motion.
+}
 
 //-------------------------------------------------------------------------------------------------
 //----------------------------------------------------------------------------------------------------
@@ -72,25 +77,25 @@ pub struct Ray {
 
 
 
-fn material_speed(depth: f64, x: f64) -> f64 {
+pub fn material_speed(depth: f64, x: f64) -> f64 {
     let y: f64 = depth;
     let result: f64;
-    let mut xInsideBoundary: bool;
-    let mut yInsideBoundary: bool;
-    let xBoundary: f64 = 1000.0;
-    let yBoundary: f64 = 4000.0;
+    let mut x_inside_boundary: bool;
+    let mut y_inside_boundary: bool;
+    let x_boundary: f64 = 1000.0;
+    let y_boundary: f64 = 2000.0;
     let seasurface: f64 = 0.0;
     let mut v: f64; //local velocity
-    let mut ycase: u32;
-    let velocityAir: f64 = 343.0;
-    if x.abs() < xBoundary {
-        xInsideBoundary= true;
+    let ycase: u32;
+    let velocity_air: f64 = 343.0;
+    if x.abs() < x_boundary {
+        x_inside_boundary= true;
     }
     else {
-        xInsideBoundary= false;
+        x_inside_boundary= false;
     }
  
-    if y < yBoundary{ //checks above ocean floor
+    if y < y_boundary{ //checks above ocean floor
         if y > seasurface { // checks below sea surface
             ycase = 1;
             //under the water
@@ -105,17 +110,17 @@ fn material_speed(depth: f64, x: f64) -> f64 {
         ycase = 3; //outside boundary
     }
 
-    if xInsideBoundary == true { // & means and.
-        //velocityWater(y)
+    if x_inside_boundary == true { // & means and.
+        //velocity_water(y)
         match ycase{
-            1=>velocityWater(y),
-            2=>velocityAir,
-            3=>velocitySilt(y, 0.1289E9),   //please change this to variable modulusoffrigidity 0.1289E9
+            1=>velocity_water(y),
+            2=>velocity_air,
+            3=>velocity_silt(y, 0.1289E9),   //please change this to variable modulusoffrigidity 0.1289E9
             _=>300.0,
         }
     }
     else{
-        velocitySilt(y, 0.1289E9)
+        velocity_silt(y, 0.1289E9)
     }
 }
 
@@ -125,7 +130,7 @@ fn material_speed(depth: f64, x: f64) -> f64 {
 
 //------------------------------------------------------------------------
 
-fn velocityWater(depth:f64) -> f64 {
+fn velocity_water(depth:f64) -> f64 {
     let salinity: f64=22.0;
     let latitude: f64=43.0;
     let temp: f64 = temperature_at_depth(depth);
@@ -135,7 +140,7 @@ speed
 }
 
 
-fn velocitySilt( density: f64, modulusofrigidity: f64 ) -> f64 {
+fn velocity_silt( density: f64, modulusofrigidity: f64 ) -> f64 {
     let speedy = (modulusofrigidity/density).sqrt();
     speedy
 }
