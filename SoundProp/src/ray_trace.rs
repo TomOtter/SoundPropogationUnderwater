@@ -1,72 +1,67 @@
 pub const PI: f64 = 3.14159265358979323846264338327950288_f64;
 
 
-
-
-
-pub struct Ray {
-    pub angle: f64,
-    pub x_pos: f64,
-    pub y_pos: f64,
-    pub intensity: f64,
-    pub step_vector: f64,
-    pub frequency: f64,
+pub struct Rays {
+    pub angle: Vec<f64>,
+    pub x_pos: Vec<f64>,
+    pub y_pos: Vec<f64>,
+    pub intensity: Vec<f64>,
+    pub step_vector: Vec<f64>,
+    pub frequency: Vec<f64>,
 
 
 } // Defines the properties of each ray.
 
-impl Ray {
+impl Rays {
     pub fn step(&mut self) {
+        let mut new_x_pos: f64;
+        let mut new_y_pos: f64;
+        for i in 0..self.x_pos.len()-1 {
+            new_x_pos = self.x_pos[i] + self.step_vector[i] * material_speed(self.y_pos[i],self.x_pos[i]) * self.angle[i].sin();
+            new_y_pos = self.y_pos[i] + self.step_vector[i] * material_speed(self.y_pos[i],self.x_pos[i]) * self.angle[i].cos();
+            // Caluclates the new position of each ray after 1 time step
 
-        let new_x_pos = self.x_pos + self.step_vector * material_speed(self.y_pos,self.x_pos) * self.angle.sin();
-        let new_y_pos = self.y_pos + self.step_vector * material_speed(self.y_pos,self.x_pos) * self.angle.cos();
-
-        if material_speed(new_y_pos, new_x_pos) > material_speed(self.y_pos, self.x_pos) {
-            let critical_angle : f64 = (material_speed(self.y_pos, self.x_pos)/material_speed(new_y_pos, new_x_pos)).asin();
-            if self.angle.abs() > critical_angle.abs() {
-                self.angle = -1.0 * self.angle;
-                self.step_vector = self.step_vector * -1.0;
+            if material_speed(new_y_pos, new_x_pos) > material_speed(self.y_pos[i], self.x_pos[i]) {
+                let critical_angle : f64 = (material_speed(self.y_pos[i], self.x_pos[i])/material_speed(new_y_pos, new_x_pos)).asin();
+                if self.angle[i].abs() > critical_angle.abs() {
+                    self.angle[i] = -1.0 * self.angle[i];
+                    self.step_vector[i] = self.step_vector[i] * -1.0;
+                }
+                // Reflects the ray if its angle with the normal exceeds the critical angle.
             }
-            // Reflects the ray if its angle with the normal exceeds the critical angle.
+            // Implement some if statement around here for reflection with boundary.
+
+            let preangle = material_speed(new_y_pos, new_x_pos)/material_speed(self.y_pos[i], self.x_pos[i]) * self.angle[i].sin();
+            self.x_pos[i] = new_x_pos;
+            self.y_pos[i] = new_y_pos;
+            self.angle[i] = preangle.asin();
+
+            let salinity = 35.0;
+            self.intensity[i] = 1.0 - calculate_absorption(self.frequency[i], temperature_at_depth(self.y_pos[i]), salinity, self.y_pos[i])
         }
-
-        let preangle = material_speed(new_y_pos, new_x_pos)/material_speed(self.y_pos, self.x_pos) * self.angle.sin();
-        self.angle = preangle.asin();
-        self.x_pos = new_x_pos;
-        self.y_pos = new_y_pos;
-
-        let salinity = 35.0;
-        self.intensity = 1.0 - calculate_absorption(self.frequency, temperature_at_depth(self.y_pos), salinity, self.y_pos)
-        
-} // Calculates the new angle and position of the ray after one step is taken.
+}
 
 
-    pub fn initialise(&mut self, dy: f64) {
+    pub fn initialise(&mut self, dt: f64) {
+        for i in 0..self.angle.len()-1 {
 
-        let initial_angle = self.angle;
-
-        let mut angle: f64 = initial_angle;
-        let mut step_vector: f64 = dy;
-
-        if initial_angle > PI/2.0 {
-            step_vector = -1.0 * dy;
-            angle = -1.0 * (PI - initial_angle)
+            if self.angle[i] > PI/2.0 {
+                self.step_vector[i] = -1.0 * dt;
+                self.angle[i] = -1.0 * (PI - self.angle[i])
+            }
+            else if self.angle[i] < -PI/2.0 {
+                self.step_vector[i] = -1.0 * dt;
+                self.angle[i] = -1.0 * (-PI - self.angle[i])
+            }
+            if self.angle[i] > 3.0 * PI/2.0 {
+                self.step_vector[i] = dt;
+                self.angle[i] = 1.0 * (3.0 * PI/2.0 - self.angle[i])
+            }
+            else if self.angle[i] < -3.0 * PI/2.0 {
+                self.step_vector[i] = dt;
+                self.angle[i] = 1.0 * (-3.0 * PI/2.0 - self.angle[i])
+            }
         }
-        else if initial_angle < -PI/2.0 {
-            step_vector = -1.0 * dy;
-            angle = -1.0 * (-PI - initial_angle)
-        }
-        if initial_angle > 3.0 * PI/2.0 {
-            step_vector = dy;
-            angle = 1.0 * (3.0 * PI/2.0 - initial_angle)
-        }
-        else if initial_angle < -3.0 * PI/2.0 {
-            step_vector = dy;
-            angle = 1.0 * (-3.0 * PI/2.0 - initial_angle)
-        }
-
-        self.step_vector = step_vector;
-        self.angle = angle;
     } // Bounds the initial angle of the ray between +/- pi/2 rads (for maths purposes). Also converts the step to show downwards (-) or upwards (+) motion.
 }
 
@@ -172,7 +167,7 @@ fn calculate_absorption(f: f64, temp: f64, salinity: f64, ddepth: f64, ) -> f64 
 
     let ph: f64  = 8.0;
    
-    let z: f64 = 10.0; // just a contant
+    let z: f64 = 10.0; // just a constant
 
     let depth = ddepth / 1000.0;
 
@@ -191,6 +186,10 @@ fn calculate_absorption(f: f64, temp: f64, salinity: f64, ddepth: f64, ) -> f64 
 
 
     (a + b + c) / 1000.0 //dB/m
+
+
+    
+}
 
 
     
