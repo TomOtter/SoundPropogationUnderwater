@@ -190,8 +190,3 @@ fn calculate_absorption(f: f64, temp: f64, salinity: f64, ddepth: f64, ) -> f64 
 
     
 }
-
-
-    
-}
-
