@@ -42,7 +42,7 @@ impl Rays {
 }
 
 
-    pub fn initialise(&mut self, dt: f64) {
+    pub fn boundAngles(&mut self, dt: f64) {
         for i in 0..self.angle.len()-1 {
 
             if self.angle[i] > PI/2.0 {
@@ -63,6 +63,27 @@ impl Rays {
             }
         }
     } // Bounds the initial angle of the ray between +/- pi/2 rads (for maths purposes). Also converts the step to show downwards (-) or upwards (+) motion.
+    
+    pub fn initialise(number_of_rays: usize) -> Self {
+        Self {
+            angle: Vec::with_capacity(number_of_rays as usize),
+            x_pos: Vec::with_capacity(number_of_rays as usize),
+            y_pos: Vec::with_capacity(number_of_rays as usize),
+            intensity: Vec::with_capacity(number_of_rays as usize),
+            frequency: Vec::with_capacity(number_of_rays as usize),
+            step_vector: Vec::with_capacity(number_of_rays as usize),
+        }
+    } // Initialisation function to define the initial size of the fields in Rays.
+
+    pub fn create_rays(&mut self, angle: Vec<f64>, x_pos: Vec<f64>, y_pos: Vec<f64>,
+         intensity: Vec<f64>, frequency: Vec<f64>, step_vector: Vec<f64>) -> () {
+            self.angle.extend(angle);
+            self.x_pos.extend(x_pos);
+            self.y_pos.extend(y_pos);
+            self.intensity.extend(intensity);
+            self.frequency.extend(frequency);
+            self.step_vector.extend(step_vector);
+    } // Appends data of new rays to the vector fields under Rays.
 }
 
 //-------------------------------------------------------------------------------------------------
@@ -190,3 +211,4 @@ fn calculate_absorption(f: f64, temp: f64, salinity: f64, ddepth: f64, ) -> f64 
 
     
 }
+
