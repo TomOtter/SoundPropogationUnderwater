@@ -1,15 +1,13 @@
 pub const PI: f64 = 3.14159265358979323846264338327950288_f64;
 
-
+//                                                  MARK: Rays Struct
 pub struct Rays {
-    pub angle: Vec<f64>,
-    pub x_pos: Vec<f64>,
-    pub y_pos: Vec<f64>,
-    pub intensity: Vec<f64>,
-    pub step_vector: Vec<f64>,
-    pub frequency: Vec<f64>,
-
-
+    angle: Vec<f64>,
+    x_pos: Vec<f64>,
+    y_pos: Vec<f64>,
+    intensity: Vec<f64>,
+    step_vector: Vec<f64>,
+    frequency: Vec<f64>,
 } // Defines the properties of each ray.
 
 impl Rays {
@@ -39,10 +37,10 @@ impl Rays {
             let salinity = 35.0;
             self.intensity[i] = 1.0 - calculate_absorption(self.frequency[i], temperature_at_depth(self.y_pos[i]), salinity, self.y_pos[i])
         }
-}
+    }
 
 
-    pub fn boundAngles(&mut self, dt: f64) {
+    pub fn bound_angles(&mut self, dt: f64) {
         for i in 0..self.angle.len()-1 {
 
             if self.angle[i] > PI/2.0 {
@@ -84,13 +82,17 @@ impl Rays {
             self.frequency.extend(frequency);
             self.step_vector.extend(step_vector);
     } // Appends data of new rays to the vector fields under Rays.
+
+    pub fn output_position(&self) -> (Vec<f64>, Vec<f64>) {
+        (self.x_pos.clone(), self.y_pos.clone())
+    }
 }
 
 //-------------------------------------------------------------------------------------------------
 //----------------------------------------------------------------------------------------------------
 
 
-
+//                                                 MARK: Material Funcs
 
 
 pub fn material_speed(depth: f64, x: f64) -> f64 {
