@@ -8,6 +8,7 @@ use std::{
 };
 use crate::ray_trace::{self, Rays};
 pub const PI: f64 = 3.14159265358979323846264338327950288_f64;
+use std::io::prelude::*;
 
 pub enum SourceType {
     Point,
@@ -184,6 +185,78 @@ impl Simulation {
         }
         // Execute the command to generate the GIF, with OS check
     }
+
+    pub fn calculate(&mut self, duration: f64) -> () {
+        if self.sources.len() == 0 {
+            eprintln!("Error: No sources have been defined. Call 'self.addSource' prior to this function to define a soundwave source.");
+            std::process::exit(1);
+        } // Ensures that a source has been defined prior to this function.
+        
+        let size: i32 = (duration / self.dt) as i32;
+        let number_of_rays: usize = self.sources.iter().map(|source| source.number_of_rays as usize).sum();
+        //Sums 'number_of_rays' across all sources.
+
+        let mut x_output: Vec<Vec<f64>> = Vec::with_capacity(size as usize);
+        let mut y_output: Vec<Vec<f64>> = Vec::with_capacity(size as usize);
+        // Allocates the x and y ouputs. Inner vector indexes ray count, outer vector indexes time.
+
+        let mut rays: Rays = ray_trace::Rays::initialise(number_of_rays);
+        // Defines the Rays struct with each variable inside having an appendable vector with minimum array size (beneficial for memory).
+        
+        for i in 0..self.sources.len() {
+            self.sources[i].create_rays(&mut rays, self.dt);
+        } // Compiles all of the initial data for each ray, from its sources, into one 'Rays' struct.
+
+        rays.bound_angles(self.dt);
+
+        for i in 0..size-1 {
+            if i != 0{
+              rays.step();  
+            } // Done to ensure that the initial positions of the rays is not overwritten in the output file.
+            let (x_pos, y_pos) = rays.output_position();
+            x_output.push( x_pos );
+            y_output.push( y_pos );
+        }
+        self.output(x_output, y_output);
+    }
+
+    fn output(&mut self, xdata: Vec<Vec<f64>>, ydata: Vec<Vec<f64>>) {
+        if xdata.len() != ydata.len() {
+            eprintln!("Error: Length of 'xdata' array does not match with length of 'ydata' array.");
+            std::process::exit(1);
+        } 
+    
+        for i in 0..xdata.len() - 1 {
+            if xdata[i].len() != ydata[i].len() {
+                eprintln!(
+                    "Error: Length of 'xdata{0}' array does not match with length of 'ydata{0}' array.", i);
+                std::process::exit(1);
+            } // Ensures that each ray has both a x and y position at each time step.
+    
+            let mut output = String::new(); // Create a new string to hold the output for this iteration
+    
+            for j in 0..xdata[i].len() - 1 {
+                let xpos: f64 = xdata[i][j];
+                let ypos: f64 = ydata[i][j];
+                output.push_str(&format!("{} {}\n", xpos, -1.0 * ypos)); // Append position data to the output string
+            }
+    
+            let file_name = format!("dataset{}.txt", i);
+    
+            let mut file = match File::create(&file_name) {
+                Ok(file) => file,
+                Err(err) => {
+                    eprintln!("Error creating file {}: {}", &file_name, err);
+                    std::process::exit(1);
+                }
+            };
+            if let Err(err) = file.write_all(output.as_bytes()) {
+                eprintln!("Error writing to file {}: {}", &file_name, err);
+                std::process::exit(1);
+            } // Creats a file for each time step and writes the x and y positions of each ray. Terminates program on failure.
+        }
+    }
+
 }
 
 
