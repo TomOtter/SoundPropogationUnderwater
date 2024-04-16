@@ -8,7 +8,6 @@ use std::{
 };
 use crate::ray_trace::{self, Rays};
 pub const PI: f64 = 3.14159265358979323846264338327950288_f64;
-use std::io::prelude::*;
 
 pub enum SourceType {
     Point,
@@ -173,13 +172,13 @@ impl Simulation {
     
         if cfg!(target_os = "windows") {
             Command::new("cmd")
-                .args(["/C", "gnuplot gifMaker.gp"])
+                .args(["/C", "gifMaker.gp"])
                 .output()
                 .expect("failed to execute process")
         } else {
             Command::new("sh")
                 .arg("-c")
-                .arg("gnuplot gifMaker.gp")
+                .arg("gifMaker.gp")
                 .output()
                 .expect("failed to execute process")
         }
