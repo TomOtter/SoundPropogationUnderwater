@@ -87,7 +87,19 @@ impl Simulation {
         self.output(x_output, y_output);
     }
 
-    //                                             MARK: Outputs
+//                                                    MARK: Outputs
+
+    fn create_folder(&mut self, folder_path: &str) -> () {
+        if !Path::new(folder_path).exists() {
+            match std::fs::create_dir(folder_path) {
+                Ok(_) => {},
+                Err(err) => {
+                    eprintln!("Error creating directory {}: {}", folder_path, err);
+                    std::process::exit(1);
+                }
+            }
+        } // Check if the folder exists, if not creates it
+    }
 
     fn output(&mut self, xdata: Vec<Vec<f64>>, ydata: Vec<Vec<f64>>) {
         if xdata.len() != ydata.len() {
@@ -115,15 +127,7 @@ impl Simulation {
             let folder_path = "./outputdata";
             // Define the folder path where output files will be stored
 
-            if !Path::new(folder_path).exists() {
-                match std::fs::create_dir(folder_path) {
-                    Ok(_) => {},
-                    Err(err) => {
-                        eprintln!("Error creating directory {}: {}", folder_path, err);
-                        std::process::exit(1);
-                    }
-                }
-            } // Check if the folder exists, if not, create it
+            self.create_folder(folder_path);
 
             let file_name = format!("{}/dataset{}.txt", folder_path, i);
             // Define the file name with the folder path and the index 'i'
@@ -169,6 +173,8 @@ impl Simulation {
             eprintln!("Error: No .txt files found in the outputdata folder");
             std::process::exit(1);
         } // Terminates the program if the directory does not contain .txt files.
+        
+        self.create_folder("./outputImages");
     
         if cfg!(target_os = "windows") {
             Command::new("cmd")
