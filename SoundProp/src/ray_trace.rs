@@ -1,96 +1,166 @@
 pub const PI: f64 = 3.14159265358979323846264338327950288_f64;
 
-pub struct Ray {
-        pub angle: f64,
-        pub x_pos: f64,
-        pub y_pos: f64,
-        pub intensity: f64,
-        pub stepVector: f64,
-        pub frequency: f64,
+//                                                  MARK: Rays Struct
+pub struct Rays {
+    angle: Vec<f64>,
+    x_pos: Vec<f64>,
+    y_pos: Vec<f64>,
+    intensity: Vec<f64>,
+    step_vector: Vec<f64>,
+    frequency: Vec<f64>,
+} // Defines the properties of each ray.
 
+impl Rays {
+    pub fn step(&mut self) {
+        let mut new_x_pos: f64;
+        let mut new_y_pos: f64;
+        for i in 0..self.x_pos.len() {
+            new_x_pos = self.x_pos[i] + self.step_vector[i] * material_speed(self.y_pos[i],self.x_pos[i]) * self.angle[i].sin();
+            new_y_pos = self.y_pos[i] + self.step_vector[i] * material_speed(self.y_pos[i],self.x_pos[i]) * self.angle[i].cos();
+            // Caluclates the new position of each ray after 1 time step
 
-    } // Defines the properties of each ray.
-
-    impl Ray {
-        pub fn step(&mut self) {
-            let new_x_pos = self.x_pos + self.stepVector * self.angle.tan();
-            let new_y_pos = self.y_pos + self.stepVector;
-
-            if material_speed(new_y_pos, new_x_pos) > material_speed(self.y_pos, self.x_pos) {
-                let criticalAngle : f64 = (material_speed(self.y_pos, self.x_pos)/material_speed(new_y_pos, new_x_pos)).asin();
-                if self.angle.abs() > criticalAngle.abs() {
-                    self.angle = -1.0 * self.angle;
-                    self.stepVector = self.stepVector * -1.0;
+            if material_speed(new_y_pos, new_x_pos) > material_speed(self.y_pos[i], self.x_pos[i]) {
+                let critical_angle : f64 = (material_speed(self.y_pos[i], self.x_pos[i])/material_speed(new_y_pos, new_x_pos)).asin();
+                if self.angle[i].abs() > critical_angle.abs() {
+                    self.angle[i] = -1.0 * self.angle[i];
+                    self.step_vector[i] = self.step_vector[i] * -1.0;
                 }
                 // Reflects the ray if its angle with the normal exceeds the critical angle.
             }
+            // Implement some if statement around here for reflection with boundary.
 
-            let preangle = material_speed(new_y_pos, new_x_pos)/material_speed(self.y_pos, self.x_pos) * self.angle.sin();
-            self.angle = preangle.asin();
-            self.x_pos = new_x_pos;
-            self.y_pos = new_y_pos;
+            let preangle = material_speed(new_y_pos, new_x_pos)/material_speed(self.y_pos[i], self.x_pos[i]) * self.angle[i].sin();
+            self.x_pos[i] = new_x_pos;
+            self.y_pos[i] = new_y_pos;
+            self.angle[i] = preangle.asin();
 
             let salinity = 35.0;
-            self.intensity = 1.0 - calculate_absorption(self.frequency, temperature_at_depth(self.y_pos), salinity, self.y_pos)
-            
-        } // Calculates the new angle and position of the ray after one step is taken.
-
-
-        pub fn initialise(&mut self, dy: f64) {
-
-            let initialAngle = self.angle;
-
-            let mut angle: f64 = initialAngle;
-            let mut stepVector: f64 = dy;
-
-            if initialAngle > PI/2.0 {
-                stepVector = -1.0 * dy;
-                angle = -1.0 * (PI - initialAngle)
-            }
-            else if initialAngle < -PI/2.0 {
-                stepVector = -1.0 * dy;
-                angle = -1.0 * (-PI - initialAngle)
-            }
-            if initialAngle > 3.0 * PI/2.0 {
-                stepVector = dy;
-                angle = 1.0 * (3.0 * PI/2.0 - initialAngle)
-            }
-            else if initialAngle < -3.0 * PI/2.0 {
-                stepVector = dy;
-                angle = 1.0 * (-3.0 * PI/2.0 - initialAngle)
-            }
-
-            self.stepVector = stepVector;
-            self.angle = angle;
-        } // Bounds the initial angle of the ray between +/- pi/2 rads (for maths purposes). Also converts the step to show downwards (-) or upwards (+) motion.
+            self.intensity[i] = 1.0 - calculate_absorption(self.frequency[i], temperature_at_depth(self.y_pos[i]), salinity, self.y_pos[i])
+        }
     }
 
-//-------------------------------------------------------------------------------------------------
-//----------------------------------------------------------------------------------------------------
+
+    pub fn bound_angles(&mut self, dt: f64) {
+        for i in 0..self.angle.len() {
+
+            if self.angle[i] > PI/2.0 {
+                self.step_vector[i] = -1.0 * dt;
+                self.angle[i] = -1.0 * (PI - self.angle[i])
+            }
+            else if self.angle[i] < -PI/2.0 {
+                self.step_vector[i] = -1.0 * dt;
+                self.angle[i] = -1.0 * (-PI - self.angle[i])
+            }
+            if self.angle[i] > 3.0 * PI/2.0 {
+                self.step_vector[i] = dt;
+                self.angle[i] = 1.0 * (3.0 * PI/2.0 - self.angle[i])
+            }
+            else if self.angle[i] < -3.0 * PI/2.0 {
+                self.step_vector[i] = dt;
+                self.angle[i] = 1.0 * (-3.0 * PI/2.0 - self.angle[i])
+            }
+        }
+    } // Bounds the initial angle of the ray between +/- pi/2 rads (for maths purposes). Also converts the step to show downwards (-) or upwards (+) motion.
+    
+    pub fn initialise(number_of_rays: usize) -> Self {
+        Self {
+            angle: Vec::with_capacity(number_of_rays as usize),
+            x_pos: Vec::with_capacity(number_of_rays as usize),
+            y_pos: Vec::with_capacity(number_of_rays as usize),
+            intensity: Vec::with_capacity(number_of_rays as usize),
+            frequency: Vec::with_capacity(number_of_rays as usize),
+            step_vector: Vec::with_capacity(number_of_rays as usize),
+        }
+    } // Initialisation function to define the initial size of the fields in Rays.
+
+    pub fn create_rays(&mut self, angle: Vec<f64>, x_pos: Vec<f64>, y_pos: Vec<f64>,
+         intensity: Vec<f64>, frequency: Vec<f64>, step_vector: Vec<f64>) -> () {
+            self.angle.extend(angle);
+            self.x_pos.extend(x_pos);
+            self.y_pos.extend(y_pos);
+            self.intensity.extend(intensity);
+            self.frequency.extend(frequency);
+            self.step_vector.extend(step_vector);
+    } // Appends data of new rays to the vector fields under Rays.
+
+    pub fn output_position(&self) -> (Vec<f64>, Vec<f64>) {
+        (self.x_pos.clone(), self.y_pos.clone())
+    } // Outputs a copy of each rays x and y position - to be used in functions implemented in other structs.
+}
 
 
+//                                             Ignore below for now
 
+/* pub struct Boundary {
+    x_limits : [f64;2],
+    boundary_function : String,
+    in_silt : bool,
+}
 
+impl Boundary {
+    
+    pub fn initialise(x_limits: [f64;2]) -> Self {
+        if x_limits[0] >= x_limits[1] {
+            eprintln!("Error: x_limits[0] must be less than x_limits[1].");
+            std::process::exit(1);
+        } // Ensures that the boundarys lower limit is less than its upper limit in the x-dimension
+        Self {
+            x_limits : x_limits,
+            boundary_function : "y = 2000.0".to_string(),
+            in_silt : false,
+        }
+    } // Initialisation function to define the fields inside of Boundary after undergoing necessary error checks.
 
-fn material_speed(depth: f64, x: f64) -> f64 {
+    pub fn boundary_height(&mut self, x_pos: f64) -> f64 {
+        let mut height: f64 = 0.0;
+        if x_pos >= self.x_limits[0] && x_pos <= self.x_limits[1] {
+            height = 2000.0;
+        }      
+        height
+    } // Defines the height of the silt boundary at a given x position (convert to 'boundary_function' dependance later).
+
+    pub fn material_speed(&mut self, y_pos: f64, x_pos: f64) -> f64 {
+        let ycase: u32;
+        let velocity_air: f64 = 343.0; // m s^-1
+
+        if y_pos <= self.boundary_height(x_pos) {
+            ycase = 3;
+        } else if y_pos > 0.0 {
+            ycase = 2
+        } else {
+            ycase = 1
+        }
+
+        match ycase{
+            1=>velocity_water(y_pos),
+            2=>velocity_air,
+            3=>velocity_silt(y_pos, 0.1289E9),   //please change this to variable modulusoffrigidity 0.1289E9
+            _=>300.0,
+        }
+    }
+} */
+
+//                                             MARK: Material Functions
+
+pub fn material_speed(depth: f64, x: f64) -> f64 {
     let y: f64 = depth;
     let result: f64;
-    let mut xInsideBoundary: bool;
-    let mut yInsideBoundary: bool;
-    let xBoundary: f64 = 1000.0;
-    let yBoundary: f64 = 4000.0;
+    let mut x_inside_boundary: bool;
+    let mut y_inside_boundary: bool;
+    let x_boundary: f64 = 1000.0;
+    let y_boundary: f64 = 2000.0;
     let seasurface: f64 = 0.0;
     let mut v: f64; //local velocity
-    let mut ycase: u32;
-    let velocityAir: f64 = 343.0;
-    if x.abs() < xBoundary {
-        xInsideBoundary= true;
+    let ycase: u32;
+    let velocity_air: f64 = 343.0;
+    if x.abs() < x_boundary {
+        x_inside_boundary= true;
     }
     else {
-        xInsideBoundary= false;
+        x_inside_boundary= false;
     }
  
-    if y < yBoundary{ //checks above ocean floor
+    if y < y_boundary{ //checks above ocean floor
         if y > seasurface { // checks below sea surface
             ycase = 1;
             //under the water
@@ -105,27 +175,23 @@ fn material_speed(depth: f64, x: f64) -> f64 {
         ycase = 3; //outside boundary
     }
 
-    if xInsideBoundary == true { // & means and.
-        //velocityWater(y)
+    if x_inside_boundary == true { // & means and.
+        //velocity_water(y)
         match ycase{
-            1=>velocityWater(y),
-            2=>velocityAir,
-            3=>velocitySilt(y, 0.1289E9),   //please change this to variable modulusoffrigidity 0.1289E9
+            1=>velocity_water(y),
+            2=>velocity_air,
+            3=>velocity_silt(y, 0.1289E9),   //please change this to variable modulusoffrigidity 0.1289E9
             _=>300.0,
         }
     }
     else{
-        velocitySilt(y, 0.1289E9)
+        velocity_silt(y, 0.1289E9)
     }
 }
 
 
 
-
-
-//------------------------------------------------------------------------
-
-fn velocityWater(depth:f64) -> f64 {
+fn velocity_water(depth:f64) -> f64 {
     let salinity: f64=22.0;
     let latitude: f64=43.0;
     let temp: f64 = temperature_at_depth(depth);
@@ -135,7 +201,7 @@ speed
 }
 
 
-fn velocitySilt( density: f64, modulusofrigidity: f64 ) -> f64 {
+fn velocity_silt( density: f64, modulusofrigidity: f64 ) -> f64 {
     let speedy = (modulusofrigidity/density).sqrt();
     speedy
 }
@@ -167,7 +233,7 @@ fn calculate_absorption(f: f64, temp: f64, salinity: f64, ddepth: f64, ) -> f64 
 
     let ph: f64  = 8.0;
    
-    let z: f64 = 10.0; // just a contant
+    let z: f64 = 10.0; // just a constant
 
     let depth = ddepth / 1000.0;
 

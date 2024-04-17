@@ -1,0 +1,1 @@
+gnuplot -e "limit = %1" gifMaker.gp
