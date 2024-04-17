@@ -175,19 +175,27 @@ impl Simulation {
         } // Terminates the program if the directory does not contain .txt files.
         
         self.create_folder("./outputImages");
+
+        let length = txt_files.len();
+        let cmd = format!("runGifMAker.bat {} ",length );
+
+
     
         if cfg!(target_os = "windows") {
             Command::new("cmd")
-                .args(["/C", "gifMaker.gp"])
+                .args(["/C", &cmd ])
                 .output()
                 .expect("failed to execute process")
         } else {
             Command::new("sh")
                 .arg("-c")
-                .arg("gifMaker.gp")
+                .arg(&cmd)
                 .output()
                 .expect("failed to execute process")
         }
+
+
+
         // Execute the command to generate the GIF, with OS check
     }
 }

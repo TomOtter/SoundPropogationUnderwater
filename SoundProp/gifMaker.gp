@@ -14,4 +14,7 @@ set yrange [-2000 : 1000]
 
 set out outfile 
 
-do for [i = 1: 100] {plot infile.i.".txt"}
+print limit
+
+
+do for [i = 1: limit - 1] {plot infile.i.".txt"}
