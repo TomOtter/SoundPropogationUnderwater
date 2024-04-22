@@ -180,12 +180,12 @@ pub fn material_speed(depth: f64, x: f64) -> f64 {
         match ycase{
             1=>velocity_water(y),
             2=>velocity_air,
-            3=>velocity_silt(y, 0.1289E9),   //please change this to variable modulusoffrigidity 0.1289E9
+            3=>velocity_silt(y),   //please change this to variable modulusoffrigidity 0.1289E9
             _=>300.0,
         }
     }
     else{
-        velocity_silt(y, 0.1289E9)
+        velocity_silt(y)
     }
 }
 
