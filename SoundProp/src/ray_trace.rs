@@ -180,12 +180,12 @@ pub fn material_speed(depth: f64, x: f64) -> f64 {
         match ycase{
             1=>velocity_water(y),
             2=>velocity_air,
-            3=>velocity_silt(y, 0.1289E9),   //please change this to variable modulusoffrigidity 0.1289E9
+            3=>velocity_silt(y),   //please change this to variable modulusoffrigidity 0.1289E9
             _=>300.0,
         }
     }
     else{
-        velocity_silt(y, 0.1289E9)
+        velocity_silt(y)
     }
 }
 
@@ -201,10 +201,15 @@ speed
 }
 
 
-fn velocity_silt( density: f64, modulusofrigidity: f64 ) -> f64 {
-    let speedy = (modulusofrigidity/density).sqrt();
-    speedy
+
+fn velocity_silt(depth:f64) -> f64 {
+    let TurbiditeAreasVelocity:f64= (1.511+ 1.304*depth*0.001 - 0.257*depth*depth*depth*0.001*0.001*0.001)*1000.0;
+    let SiliceousSedimentVelocity:f64 = (1.509 + 0.869*depth*0.001 - 0.267*depth*depth*0.001*0.001)*1000.0;
+    let CalcerousSedimentsVelocity:f64 = (1.559 + 1.713*depth*0.001 - 0.374*depth*depth*0.001*0.001)*1000.0;
+    let sandvelocity:f64=1626.0; 
+TurbiditeAreasVelocity
 }
+
 
 
 
