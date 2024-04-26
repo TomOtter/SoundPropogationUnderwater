@@ -1,11 +1,11 @@
 use core::num;
 use std::{
     collections::HashMap,
-    fs::{self, File},
-    io::prelude::*,
-    path::Path,
-    process::{Command, Output},
-    time::Duration,
+    fs::{self, File}, 
+    io::prelude::*, 
+    path::Path, 
+    process::{Command, Output}, 
+    time::Duration
 };
 pub const PI: f64 = 3.14159265358979323846264338327950288_f64;
 
@@ -81,13 +81,13 @@ impl Simulation {
         for i in 0..size {
             if i != 0{
                 self.grid.squares.clear();
-                rays.step(self.grid.x_range, self.grid.y_range);  
+                rays.step(self.dt, self.grid.x_range, self.grid.y_range);  
             } // Done to ensure that the initial positions of the rays is not overwritten in the output file.
             if (i % frame_spacing) == 0 {
                 let (x_pos, y_pos) = rays.output_position();
-                let intensity = rays.output_intensity();
+                let (intensity, phase) = rays.output_intensity_phase();
                 for j in 0..x_pos.len() {
-                    self.grid.append([x_pos[j], y_pos[j]], intensity[j]);
+                    self.grid.append( [x_pos[j], y_pos[j]], intensity[j], phase[j] );
                 }
                 self.output(i / frame_spacing);
             }
@@ -268,10 +268,11 @@ pub struct Rays {
     intensity: Vec<f64>,
     step_vector: Vec<f64>,
     frequency: Vec<f64>,
+    propagation_time: Vec<f64>
 } // Defines the properties of each ray.
 
 impl Rays {
-    pub fn step(&mut self, simulation_x_limit: [f64;2], simulation_y_limit: [f64;2]) -> () {
+    pub fn step(&mut self, dt: f64, simulation_x_limit: [f64;2], simulation_y_limit: [f64;2]) -> () {
         let mut new_x_pos: f64;
         let mut new_y_pos: f64;
         let mut i: usize = 0;
@@ -284,7 +285,9 @@ impl Rays {
                 self.intensity.remove(i);
                 self.step_vector.remove(i);
                 self.frequency.remove(i);
+                // Removes data if it leaves the simulation range
             } else { 
+                self.propagation_time[i] += dt;
                 new_x_pos = self.x_pos[i] + self.step_vector[i] * material_speed(self.y_pos[i],self.x_pos[i]) * self.angle[i].sin();
                 new_y_pos = self.y_pos[i] + self.step_vector[i] * material_speed(self.y_pos[i],self.x_pos[i]) * self.angle[i].cos();
                 // Caluclates the new position of each ray after 1 time step
@@ -342,32 +345,38 @@ impl Rays {
             intensity: Vec::with_capacity(number_of_rays as usize),
             frequency: Vec::with_capacity(number_of_rays as usize),
             step_vector: Vec::with_capacity(number_of_rays as usize),
+            propagation_time: Vec::with_capacity(number_of_rays as usize),
         }
     } // Initialisation function to define the initial size of the fields in Rays.
 
     pub fn create_rays(&mut self, angle: Vec<f64>, x_pos: Vec<f64>, y_pos: Vec<f64>,
          intensity: Vec<f64>, frequency: Vec<f64>, step_vector: Vec<f64>) -> () {
-            self.angle.extend(angle);
+            self.angle.extend(&angle);
             self.x_pos.extend(x_pos);
             self.y_pos.extend(y_pos);
             self.intensity.extend(intensity);
             self.frequency.extend(frequency);
             self.step_vector.extend(step_vector);
+            self.propagation_time.extend( vec![0.0;angle.len()] );
     } // Appends data of new rays to the vector fields under Rays.
 
     pub fn output_position(&self) -> (Vec<f64>, Vec<f64>) {
         (self.x_pos.clone(), self.y_pos.clone())
     } // Outputs a copy of each rays x and y position - to be used in functions implemented in other structs.
 
-    pub fn output_intensity(&self) -> Vec<f64> {
-        self.intensity.clone()
+    pub fn output_intensity_phase(&self) -> (Vec<f64>, Vec<f64>) {
+        let mut phase = Vec::with_capacity( self.intensity.len() );
+        for i in 0..self.intensity.len(){
+            phase.push(2.0 * PI * self.frequency[i] * self.propagation_time[i]);
+        }
+        (self.intensity.clone(), phase)
     } // Outputs a copy of each rays x and y position - to be used in functions implemented in other structs.
 }
 
 //                                                  MARK: Grid Struct
 
 pub struct Grid {
-    squares: HashMap<(usize, usize), Option<f64>>,
+    squares: HashMap< (usize, usize), Option< (Vec<f64>, Vec<f64>) > >,
     x_range: [f64;2],
     y_range: [f64;2],
     square_size: f64,
@@ -396,51 +405,55 @@ impl Grid {
         }
     }
 
-    pub fn append(&mut self, location: [f64; 2], intensity: f64) {
+    pub fn append(&mut self, location: [f64; 2], intensity: f64, phase_shift: f64) -> () {
         let x_grid: usize = ( (location[0] - self.x_range[0] ) / self.square_size) as usize;
         let y_grid: usize = ( (location[1] - self.y_range[0] ) / self.square_size) as usize;
-        let phase_difference: f64 = 0.0;
-    
-        // Get a mutable reference to the intensity value in the grid square
+
         if let Some(existing_intensity) = self.squares.get_mut(&(x_grid, y_grid)) {
-            // Check if the grid square already contains an intensity value
+            // Get a mutable reference to the intensity value in the grid square
             match existing_intensity {
-                // If the intensity value exists, update it
-                Some(intensity_ref) => {
-                    let old_intensity: f64 = *intensity_ref;
-                    let new_intensity: f64 = old_intensity + intensity +
-                        2.0 * (old_intensity * intensity).sqrt() * (phase_difference).cos();
-                    *intensity_ref = new_intensity;
-                },
-                // If the intensity value doesn't exist, insert the new intensity directly
+                Some((intensity_ref, phase_ref)) => {
+                    intensity_ref.push(intensity);
+                    phase_ref.push(phase_shift);
+                } // If the intensity and phase value exists, append the intensity and phase difference
                 None => {
-                    *existing_intensity = Some(intensity);
-                }
+                    *existing_intensity = Some( (vec![intensity], vec![phase_shift]) );
+                } // If the intensity value doesn't exist, insert the new intensity and phase difference
             }
         } else {
-            // If the grid square doesn't exist, create it and insert the new intensity
-            self.squares.insert((x_grid, y_grid), Some(intensity));
-        }
+            self.squares.insert((x_grid, y_grid), Some( (vec![intensity], vec![phase_shift]) ));
+        } // If the grid square doesn't exist, create it and insert the new intensity and phase shift
     }
 
     pub fn output_data(&self) -> (Vec<f64>, Vec<f64>, Vec<f64>) {
         let mut x_positions = Vec::new();
         let mut y_positions = Vec::new();
         let mut intensities = Vec::new();
+    
+        for ((x, y), (ray_data)) in &self.squares {
+            let mut superimposed_intensity: f64 = 0.0;
 
-        // Iterate over the grid squares
-        for ((x, y), intensity_option) in &self.squares {
-            // Check if the grid square contains an intensity value
-            if let Some(intensity) = intensity_option {
-                // Push x position, y position, and intensity into their respective vectors
-                x_positions.push((*x as f64 + 0.5) * self.square_size + self.x_range[0]);
-                y_positions.push((*y as f64 + 0.5) * self.square_size + self.y_range[0]);
-                intensities.push(*intensity);
+            if let Some((grid_intensities, grid_phases)) = ray_data {
+                // Check if the grid square contains intensity values
+
+                for i in 0..grid_intensities.len() {
+                    if grid_intensities.len() != 1 {
+                        for j in (i+1)..grid_intensities.len() {
+                                superimposed_intensity += 2.0 * f64::sqrt(grid_intensities[i] * grid_intensities[j]) * (grid_phases[i] - grid_phases[j]).cos()
+                        }
+                    }
+
+                    superimposed_intensity += grid_intensities[i];
+                } // I_eff = I_1 + I_2 + ... I_N + 2 * Sum over all i,j>i ( sqrt(I_i * I_j) cos(phi_i - phi_j))
+
+                x_positions.push( (*x as f64 + 0.5) * self.square_size + self.x_range[0]);
+                y_positions.push( (*y as f64 + 0.5) * self.square_size + self.y_range[0]);
+                intensities.push(superimposed_intensity);
+                // Appends data to output. Position data is converted to output the centre of its grid square.
             }
         }
-
-        // Return a tuple containing the vectors of x positions, y positions, and intensities
         (x_positions, y_positions, intensities)
+        // Return a tuple containing the vectors of x positions, y positions, intensities, and phase shifts
     }
 }
 
