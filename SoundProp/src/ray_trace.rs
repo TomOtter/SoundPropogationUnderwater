@@ -489,19 +489,24 @@ TurbiditeAreasVelocity
 fn temperature_at_depth(depth: f64) -> f64 {
     
     let surface_temp: f64 = 20.0;  // degrees C
-    let bottom_temp:f64 = 4.0;  // degrees C
+    let middle_temp: f64 = 4.0;  // degrees C
+    let bottom_temp:f64 = 3.0;  // degrees C
     let thermocline_start:f64 = 200.0;  // metres //temp is constant from 0-200m
     let thermocline_end:f64 = 1000.0;  // metres
+    let thermocline_start2:f64 = 1000.0;  // metres 
+    let thermocline_end2:f64 = 5000.0;  // metres
 
   //constant temperature up to 200m based on literature - thermocline start depth
-    if depth <= thermocline_start {
+   if depth <= thermocline_start {
         surface_temp
     } else if depth >= thermocline_end {
-        bottom_temp
+        // Linear interpolation beyond the thermocline
+        let fraction2 = (depth - thermocline_start2) / (thermocline_end2 - thermocline_start2);
+        middle_temp + fraction2 * (bottom_temp - middle_temp)
     } else {
         // Linear interpolation within the thermocline
         let fraction = (depth - thermocline_start) / (thermocline_end - thermocline_start);
-        surface_temp + fraction * (bottom_temp - surface_temp)
+        surface_temp + fraction * (middle_temp - surface_temp)
     }
 }
 
