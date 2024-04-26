@@ -433,8 +433,8 @@ impl Grid {
             // Check if the grid square contains an intensity value
             if let Some(intensity) = intensity_option {
                 // Push x position, y position, and intensity into their respective vectors
-                x_positions.push((*x as f64) + self.x_range[0]);
-                y_positions.push((*y as f64) + self.y_range[0]);
+                x_positions.push((*x as f64 + 0.5) * self.square_size + self.x_range[0]);
+                y_positions.push((*y as f64 + 0.5) * self.square_size + self.y_range[0]);
                 intensities.push(*intensity);
             }
         }
