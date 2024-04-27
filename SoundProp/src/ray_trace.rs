@@ -1,11 +1,9 @@
-use core::num;
 use std::{
     collections::HashMap,
     fs::{self, File}, 
     io::prelude::*, 
     path::Path, 
     process::{Command, Output}, 
-    time::Duration
 };
 pub const PI: f64 = 3.14159265358979323846264338327950288_f64;
 
@@ -19,6 +17,7 @@ pub struct Simulation {
     dt : f64,
     sources : Vec<Source>,
     grid: Grid,
+    rays: Rays,
     //pub water_type : somefunction,
     //pub boundary_type: somefunction,
 }
@@ -35,20 +34,18 @@ impl Simulation {
             dt : dt,
             sources : Vec::new(),
             grid: grid,
+            rays: Default::default(),
+            // Defines all other 'child' structs under the parent. 'rays' has not yet been defined.
         }
     } // Initialisation function to define the fields inside of Simulation after undergoing necessary error checks.
 
-    pub fn add_source(&mut self, min_angle: f64, max_angle: f64, number_of_rays: i32, intensity: f64, frequency: f64, location: [f64;2], source_type: SourceType) -> () {
-        if min_angle >= max_angle {
-            eprintln!("Error: Minimum angle must be less than the maximum angle.");
-            std::process::exit(1);
-        } // Checks if the minimum angle is less than the maximum angle.
-        if min_angle.abs() > PI || max_angle.abs() > PI {
+    pub fn add_source(&mut self, start_angle: f64, end_angle: f64, number_of_rays: i32, intensity: f64, frequency: f64, location: [f64;2], source_type: SourceType) -> () {
+        if start_angle.abs() > PI || end_angle.abs() > PI {
             eprintln!("Error: Minimum and maximum angles must be within the range of -π to π.");
             std::process::exit(1);
         } // Checks if the minimum and maximum angles are within the range of +/- PI.
 
-        let new_source: Source = Source::initialise(source_type, min_angle, max_angle, 
+        let new_source: Source = Source::initialise(source_type, start_angle, end_angle, 
             number_of_rays as usize, intensity, frequency, location);
         
         self.sources.push(new_source);
@@ -69,25 +66,24 @@ impl Simulation {
         let number_of_rays: usize = self.sources.iter().map(|source| source.number_of_rays as usize).sum();
         //Sums 'number_of_rays' across all sources.
 
-        let mut rays: Rays = Rays::initialise(number_of_rays);
+        self.rays = Rays::initialise(number_of_rays);
         // Defines the Rays struct with each variable inside having an appendable vector with minimum array size (beneficial for memory).
         
         for i in 0..self.sources.len() {
-            self.sources[i].create_rays(&mut rays, self.dt);
+            self.sources[i].create_rays(&mut self.rays, self.dt);
         } // Compiles all of the initial data for each ray, from its sources, into one 'Rays' struct.
 
-        rays.bound_angles(self.dt);
+        self.rays.bound_angles(self.dt);
 
         for i in 0..size {
             if i != 0{
                 self.grid.squares.clear();
-                rays.step(self.dt, self.grid.x_range, self.grid.y_range);  
+                self.rays.step(self.dt, self.grid.x_range, self.grid.y_range);  
             } // Done to ensure that the initial positions of the rays is not overwritten in the output file.
             if (i % frame_spacing) == 0 {
-                let (x_pos, y_pos) = rays.output_position();
-                let (intensity, phase) = rays.output_intensity_phase();
-                for j in 0..x_pos.len() {
-                    self.grid.append( [x_pos[j], y_pos[j]], intensity[j], phase[j] );
+                for j in 0..self.rays.x_pos.len() {
+                    let phase = self.rays.output_phase(i as usize);
+                    self.grid.append( [self.rays.x_pos[j], self.rays.y_pos[j]], self.rays.intensity[j], phase );
                 }
                 self.output(i / frame_spacing);
             }
@@ -209,7 +205,7 @@ pub struct Source {
 }
 
 impl Source {
-    pub fn initialise(source_type: SourceType, min_angle: f64, max_angle: f64,
+    pub fn initialise(source_type: SourceType, start_angle: f64, mut end_angle: f64,
     number_of_rays: usize, intensity: f64, frequency: f64, location: [f64;2]) -> Self {
         if number_of_rays <= 0 {
             eprintln!("Error: number_of_rays must be a positive, non-zero, integer value.");
@@ -223,9 +219,14 @@ impl Source {
             eprintln!("Error: frequency must be a positive, non-zero, float value.");
             std::process::exit(1);
         }
+
+        if end_angle <= start_angle {
+            end_angle += 2.0 * PI;
+        }
+
         Self {
             source_type : source_type,
-            angle_range : [min_angle, max_angle],
+            angle_range : [start_angle, end_angle],
             number_of_rays : number_of_rays,
             intensity : intensity,
             frequency : frequency,
@@ -233,14 +234,16 @@ impl Source {
         }
     } // Initialisation function to define the fields inside of Struct after undergoing necessary error checks.
 
-    pub fn create_rays(&mut self, initial_rays: &mut Rays, dt: f64) {
+    fn create_rays(&mut self, initial_rays: &mut Rays, dt: f64) {
         let mut initial_angles: Vec<f64> = Vec::with_capacity(self.number_of_rays);
         match self.source_type {
             SourceType::Point => {
                 let angle_spacing: f64 = (self.angle_range[1] - self.angle_range[0]) / (self.number_of_rays as f64);
 
                 for i in 0..self.number_of_rays {
-                    initial_angles.push( self.angle_range[0] + (angle_spacing * i as f64) );
+                    let mut ray_angle: f64 = self.angle_range[0] + (angle_spacing * i as f64);
+                    if ray_angle > (2.0 * PI) { ray_angle -= 2.0 * PI }
+                    initial_angles.push( ray_angle );
                 } // Evenly spaces out the arrays at the source between the given bounds and appends to the initial ray angles struct.
 
                 let local_ray_intensity: f64 = self.intensity / f64::powi(self.number_of_rays as f64, 2);
@@ -261,6 +264,7 @@ impl Source {
 }
 
 //                                                  MARK: Rays Struct
+#[derive(Default)]
 pub struct Rays {
     angle: Vec<f64>,
     x_pos: Vec<f64>,
@@ -272,7 +276,52 @@ pub struct Rays {
 } // Defines the properties of each ray.
 
 impl Rays {
-    pub fn step(&mut self, dt: f64, simulation_x_limit: [f64;2], simulation_y_limit: [f64;2]) -> () {
+    pub fn initialise(number_of_rays: usize) -> Self {
+        Self {
+            angle: Vec::with_capacity(number_of_rays as usize),
+            x_pos: Vec::with_capacity(number_of_rays as usize),
+            y_pos: Vec::with_capacity(number_of_rays as usize),
+            intensity: Vec::with_capacity(number_of_rays as usize),
+            frequency: Vec::with_capacity(number_of_rays as usize),
+            step_vector: Vec::with_capacity(number_of_rays as usize),
+            propagation_time: Vec::with_capacity(number_of_rays as usize),
+        }
+    } // Initialisation function to define the initial size of the fields in Rays.
+    
+    fn bound_angles(&mut self, dt: f64) {
+        for i in 0..self.angle.len() {
+
+            if self.angle[i] > PI/2.0 {
+                self.step_vector[i] = -1.0 * dt;
+                self.angle[i] = -1.0 * (PI - self.angle[i])
+            }
+            else if self.angle[i] < -PI/2.0 {
+                self.step_vector[i] = -1.0 * dt;
+                self.angle[i] = -1.0 * (-PI - self.angle[i])
+            }
+            if self.angle[i] > 3.0 * PI/2.0 {
+                self.step_vector[i] = dt;
+                self.angle[i] = 1.0 * (3.0 * PI/2.0 - self.angle[i])
+            }
+            else if self.angle[i] < -3.0 * PI/2.0 {
+                self.step_vector[i] = dt;
+                self.angle[i] = 1.0 * (-3.0 * PI/2.0 - self.angle[i])
+            }
+        }
+    } // Bounds the initial angle of the ray between +/- pi/2 rads (for maths purposes). Also converts the step to show downwards (-) or upwards (+) motion.
+
+    fn create_rays(&mut self, angle: Vec<f64>, x_pos: Vec<f64>, y_pos: Vec<f64>,
+         intensity: Vec<f64>, frequency: Vec<f64>, step_vector: Vec<f64>) -> () {
+            self.angle.extend(&angle);
+            self.x_pos.extend(x_pos);
+            self.y_pos.extend(y_pos);
+            self.intensity.extend(intensity);
+            self.frequency.extend(frequency);
+            self.step_vector.extend(step_vector);
+            self.propagation_time.extend( vec![0.0;angle.len()] );
+    } // Appends data of new rays to the vector fields under Rays.
+
+    fn step(&mut self, dt: f64, simulation_x_limit: [f64;2], simulation_y_limit: [f64;2]) -> () {
         let mut new_x_pos: f64;
         let mut new_y_pos: f64;
         let mut i: usize = 0;
@@ -314,62 +363,8 @@ impl Rays {
         }
     }
 
-
-    pub fn bound_angles(&mut self, dt: f64) {
-        for i in 0..self.angle.len() {
-
-            if self.angle[i] > PI/2.0 {
-                self.step_vector[i] = -1.0 * dt;
-                self.angle[i] = -1.0 * (PI - self.angle[i])
-            }
-            else if self.angle[i] < -PI/2.0 {
-                self.step_vector[i] = -1.0 * dt;
-                self.angle[i] = -1.0 * (-PI - self.angle[i])
-            }
-            if self.angle[i] > 3.0 * PI/2.0 {
-                self.step_vector[i] = dt;
-                self.angle[i] = 1.0 * (3.0 * PI/2.0 - self.angle[i])
-            }
-            else if self.angle[i] < -3.0 * PI/2.0 {
-                self.step_vector[i] = dt;
-                self.angle[i] = 1.0 * (-3.0 * PI/2.0 - self.angle[i])
-            }
-        }
-    } // Bounds the initial angle of the ray between +/- pi/2 rads (for maths purposes). Also converts the step to show downwards (-) or upwards (+) motion.
-    
-    pub fn initialise(number_of_rays: usize) -> Self {
-        Self {
-            angle: Vec::with_capacity(number_of_rays as usize),
-            x_pos: Vec::with_capacity(number_of_rays as usize),
-            y_pos: Vec::with_capacity(number_of_rays as usize),
-            intensity: Vec::with_capacity(number_of_rays as usize),
-            frequency: Vec::with_capacity(number_of_rays as usize),
-            step_vector: Vec::with_capacity(number_of_rays as usize),
-            propagation_time: Vec::with_capacity(number_of_rays as usize),
-        }
-    } // Initialisation function to define the initial size of the fields in Rays.
-
-    pub fn create_rays(&mut self, angle: Vec<f64>, x_pos: Vec<f64>, y_pos: Vec<f64>,
-         intensity: Vec<f64>, frequency: Vec<f64>, step_vector: Vec<f64>) -> () {
-            self.angle.extend(&angle);
-            self.x_pos.extend(x_pos);
-            self.y_pos.extend(y_pos);
-            self.intensity.extend(intensity);
-            self.frequency.extend(frequency);
-            self.step_vector.extend(step_vector);
-            self.propagation_time.extend( vec![0.0;angle.len()] );
-    } // Appends data of new rays to the vector fields under Rays.
-
-    pub fn output_position(&self) -> (Vec<f64>, Vec<f64>) {
-        (self.x_pos.clone(), self.y_pos.clone())
-    } // Outputs a copy of each rays x and y position - to be used in functions implemented in other structs.
-
-    pub fn output_intensity_phase(&self) -> (Vec<f64>, Vec<f64>) {
-        let mut phase = Vec::with_capacity( self.intensity.len() );
-        for i in 0..self.intensity.len(){
-            phase.push(2.0 * PI * self.frequency[i] * self.propagation_time[i]);
-        }
-        (self.intensity.clone(), phase)
+    fn output_phase(&self, index: usize) -> f64 {
+        2.0 * PI * self.frequency[index] * self.propagation_time[index]
     } // Outputs a copy of each rays x and y position - to be used in functions implemented in other structs.
 }
 
@@ -405,9 +400,10 @@ impl Grid {
         }
     }
 
-    pub fn append(&mut self, location: [f64; 2], intensity: f64, phase_shift: f64) -> () {
+    fn append(&mut self, location: [f64; 2], intensity: f64, phase_shift: f64) -> () {
         let x_grid: usize = ( (location[0] - self.x_range[0] ) / self.square_size) as usize;
         let y_grid: usize = ( (location[1] - self.y_range[0] ) / self.square_size) as usize;
+        // Converts the position of the ray into a grid coordinate
 
         if let Some(existing_intensity) = self.squares.get_mut(&(x_grid, y_grid)) {
             // Get a mutable reference to the intensity value in the grid square
@@ -425,12 +421,12 @@ impl Grid {
         } // If the grid square doesn't exist, create it and insert the new intensity and phase shift
     }
 
-    pub fn output_data(&self) -> (Vec<f64>, Vec<f64>, Vec<f64>) {
+    fn output_data(&self) -> (Vec<f64>, Vec<f64>, Vec<f64>) {
         let mut x_positions = Vec::new();
         let mut y_positions = Vec::new();
         let mut intensities = Vec::new();
     
-        for ((x, y), (ray_data)) in &self.squares {
+        for ((x, y), ray_data) in &self.squares {
             let mut superimposed_intensity: f64 = 0.0;
 
             if let Some((grid_intensities, grid_phases)) = ray_data {
@@ -442,7 +438,6 @@ impl Grid {
                                 superimposed_intensity += 2.0 * f64::sqrt(grid_intensities[i] * grid_intensities[j]) * (grid_phases[i] - grid_phases[j]).cos()
                         }
                     }
-
                     superimposed_intensity += grid_intensities[i];
                 } // I_eff = I_1 + I_2 + ... I_N + 2 * Sum over all i,j>i ( sqrt(I_i * I_j) cos(phi_i - phi_j))
 
@@ -572,11 +567,11 @@ speed
 
 
 fn velocity_silt(depth:f64) -> f64 {
-    let TurbiditeAreasVelocity:f64= (1.511+ 1.304*depth*0.001 - 0.257*depth*depth*depth*0.001*0.001*0.001)*1000.0;
-    let SiliceousSedimentVelocity:f64 = (1.509 + 0.869*depth*0.001 - 0.267*depth*depth*0.001*0.001)*1000.0;
-    let CalcerousSedimentsVelocity:f64 = (1.559 + 1.713*depth*0.001 - 0.374*depth*depth*0.001*0.001)*1000.0;
-    let sandvelocity:f64=1626.0; 
-TurbiditeAreasVelocity
+    let turbidite_areas_velocity:f64= (1.511+ 1.304*depth*0.001 - 0.257*depth*depth*depth*0.001*0.001*0.001)*1000.0;
+    let siliceous_sediment_velocity:f64 = (1.509 + 0.869*depth*0.001 - 0.267*depth*depth*0.001*0.001)*1000.0;
+    let calcerous_sediments_velocity:f64 = (1.559 + 1.713*depth*0.001 - 0.374*depth*depth*0.001*0.001)*1000.0;
+    let sand_velocity:f64=1626.0; 
+turbidite_areas_velocity
 }
 
 
