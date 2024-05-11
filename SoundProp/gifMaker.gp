@@ -4,21 +4,27 @@ pwd
 
 set term gif animate delay 4 size 600, 600
 
-infile = sprintf("%s%s",".\\outputdata\\", "dataset")
-
-outfile = sprintf("%s%s%s",".\\outputImages", "\\imageGif", ".gif")
+# Define input and output paths
+infile = ".\\outputdata\\dataset"
+outfile = ".\\outputImages\\imageGif.gif"
+boundary = ".\\outputdata\\boundary0"
 
 set xrange [-1500 : 1500]
 set yrange [-2000 : 1000]
-set cbrange [0:0.00004]  # Set the color range from 0.966 to 1
+set cbrange [0:0.00004]
 
-
-set out outfile 
+# Output to GIF file
+set out outfile
 
 limit = 100
 
-do for [i = 0: limit-1] {
-    plot infile.i.".txt" using 1:2:3 with points pt 7 ps 1 palette title sprintf("Frame: %.2f", i)}
+do for [i = 0:limit-1] {
+    plot infile.i.".txt" using 1:2:3 with points pt 7 ps 1 palette title sprintf("Ray at frame %.2f", i), \
+         boundary.".txt" using 1:2 with lines lc "black" lw 2 title sprintf("Boundary")
+}
+
+# Close the output file
+set out
 
 
 

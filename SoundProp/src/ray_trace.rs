@@ -1,28 +1,27 @@
 use std::{
+    any::type_name,
     collections::HashMap,
-    fs::{self, File}, 
-    io::prelude::*, 
-    path::Path, 
-    process::{Command, Output}, 
+    fs::{self, File},
+    io::prelude::*,
+    path::Path,
+    process::{Command, Output} 
 };
-pub const PI: f64 = 3.14159265358979323846264338327950288_f64;
 
+pub const PI: f64 = 3.14159265358979323846264338327950288_f64;
 pub enum SourceType {
     Point,
     Line,
 }
 
 //                                               MARK: Simulation Struct
-pub struct Simulation {
-    dt : f64,
+pub struct Simulation<F: SingleInputFunction> {
     sources : Vec<Source>,
     grid: Grid,
     rays: Rays,
-    //pub water_type : somefunction,
-    //pub boundary_type: somefunction,
+    boundaries: Vec<Boundary<F>>,
 }
 
-impl Simulation {
+impl<F: SingleInputFunction> Simulation<F> {
 
     pub fn initialise(dt: f64, square_size: f64, simulation_x_range: [f64;2], simulation_y_range: [f64;2]) -> Self {
         if dt <= 0.0 {
@@ -31,10 +30,10 @@ impl Simulation {
         } // Ensures that dt is a positive, non-zero, float.
         let grid = Grid::initialise(square_size, simulation_x_range, simulation_y_range);
         Self {
-            dt : dt,
             sources : Vec::new(),
-            grid: grid,
-            rays: Default::default(),
+            grid : grid,
+            rays : Default::default(),
+            boundaries : Vec::new(),
             // Defines all other 'child' structs under the parent. 'rays' has not yet been defined.
         }
     } // Initialisation function to define the fields inside of Simulation after undergoing necessary error checks.
@@ -52,7 +51,27 @@ impl Simulation {
         // Adds new source to an array of sources under the Simulation struct.
     }
 
-    fn calculate(&mut self, duration: f64, frames: i32) -> () {
+    pub fn add_boundary(&mut self, shape_function: F) -> ()
+    where
+        F: SingleInputFunction + 'static,
+    {
+        let new_boundary = Boundary::initialise(shape_function);
+        self.boundaries.push( new_boundary.unwrap() );
+    }
+
+    pub fn x_limits(&mut self, limits: [f64;2]) -> () {
+        if let Some(last_boundary) = self.boundaries.last_mut() {
+            last_boundary.set_x_limits(limits);
+        }
+    }
+
+    pub fn y_upper_limit(&mut self, limit: f64) -> () {
+        if let Some(last_boundary) = self.boundaries.last_mut() {
+            last_boundary.set_y_maximum(limit);
+        }
+    }
+
+    fn calculate(&mut self, dt: f64, duration: f64, frames: i32) -> () {
         if self.sources.len() == 0 {
             eprintln!("Error: No sources have been defined. Call 'self.addSource' prior to this function to define a soundwave source.");
             std::process::exit(1);
@@ -61,7 +80,7 @@ impl Simulation {
         self.create_folder("./outputdata");
         // Creates folder for data files to be stored
 
-        let size: i32 = (duration / self.dt) as i32;
+        let size: i32 = (duration / dt) as i32;
         let frame_spacing: i32 = size / frames;
         let number_of_rays: usize = self.sources.iter().map(|source| source.number_of_rays as usize).sum();
         //Sums 'number_of_rays' across all sources.
@@ -70,22 +89,25 @@ impl Simulation {
         // Defines the Rays struct with each variable inside having an appendable vector with minimum array size (beneficial for memory).
         
         for i in 0..self.sources.len() {
-            self.sources[i].create_rays(&mut self.rays, self.dt);
+            self.sources[i].create_rays(&mut self.rays, dt);
         } // Compiles all of the initial data for each ray, from its sources, into one 'Rays' struct.
 
-        self.rays.bound_angles(self.dt);
+        self.rays.bound_angles(dt);
 
         for i in 0..size {
             if i != 0{
                 self.grid.squares.clear();
-                self.rays.step(self.dt, self.grid.x_range, self.grid.y_range);  
+                self.rays.step(dt, &mut self.boundaries, self.grid.x_range, self.grid.y_range);  
             } // Done to ensure that the initial positions of the rays is not overwritten in the output file.
             if (i % frame_spacing) == 0 {
                 for j in 0..self.rays.x_pos.len() {
-                    let phase = self.rays.output_phase(i as usize);
-                    self.grid.append( [self.rays.x_pos[j], self.rays.y_pos[j]], self.rays.intensity[j], phase );
+                    let phase = self.rays.output_phase(j as usize);
+                    self.grid.append([self.rays.x_pos[j], self.rays.y_pos[j]], self.rays.intensity[j], phase);
+                    // Adds the intensity and phase shift to a specific 'grid square' (location defined by ray position).
                 }
-                self.output(i / frame_spacing);
+                let (xpos, ypos, intensity) = self.grid.output_data();
+                self.output(xpos, ypos, intensity, "/dataset", i / frame_spacing);
+                // Outputs the intensitys at each grid square to a file
             }
         } // Time loop which pushes each ray by one step and outputs the new positions each iteration.
     }
@@ -113,14 +135,12 @@ impl Simulation {
         } // Create the new directory
     }
 
-    fn output(&mut self, file_count: i32) -> () {
-        let (xpos, ypos, intensity) = self.grid.output_data();
-
+    fn output(&mut self, xpos: Vec<f64>, ypos: Vec<f64>, intensity: Vec<f64>, filename: &str, file_count: i32) -> () {
             let mut output = String::new();
             // Create a string to hold the output for this iteration
 
             for i in 0..xpos.len() {
-                output.push_str(&format!("{} {} {}\n", xpos[i], -1.0 * ypos[i], intensity[i]));
+                output.push_str(&format!("{} {} {}\n", xpos[i], ypos[i], intensity[i]));
                 // Append position data to the output string
 
             } // Loop through each position in the current time step
@@ -128,7 +148,7 @@ impl Simulation {
             let folder_path = "./outputdata";
             // Define the folder path where output files will be stored
 
-            let file_name = format!("{}/dataset{}.txt", folder_path, file_count);
+            let file_name = format!("{}{}{}.txt", folder_path, filename, file_count);
             // Define the file name with the folder path and the index 'i'
     
             let mut file = match File::create(&file_name) {
@@ -145,8 +165,13 @@ impl Simulation {
             } // Write the output string to the file
     }
 
-    pub fn gif(&mut self, duration: f64, frames: i32) -> Output {
-        self.calculate(duration, frames);
+    pub fn gif(&mut self, duration: f64, dt: f64, frames: i32) -> Output {
+        if frames as f64 > (duration / dt) {
+            eprintln!("Error: There is not enough time steps to accomodate the requested number of frames. Consider decreasing dt or frames.");
+            std::process::exit(1);
+        } // Terminates the program if the number of frames requested is greater than the maximum possible number of files produced
+
+        self.calculate(dt, duration, frames);
         let txt_files = match fs::read_dir("outputdata") {
             Ok(entries) => {
                 entries.filter_map(|entry| {
@@ -171,6 +196,17 @@ impl Simulation {
             eprintln!("Error: No .txt files found in the outputdata folder");
             std::process::exit(1);
         } // Terminates the program if the directory does not contain .txt files.
+
+        let size = 1000 * self.boundaries.len();
+        let mut boundary_x: Vec<f64> = Vec::with_capacity(size);
+        let mut boundary_y: Vec<f64> = Vec::with_capacity(size);
+        for i in 0..self.boundaries.len() {
+            for j in 0..999 {
+                boundary_x.push(j as f64 * (self.grid.x_range[1] - self.grid.x_range[0]) / 1000.0 + self.grid.x_range[0]);
+                boundary_y.push(self.boundaries[i].boundary_height(*boundary_x.last().unwrap()).unwrap());
+            }
+        }
+        self.output(boundary_x, boundary_y, vec![0.0 ; size], "/boundary", 0);
         
         self.create_folder("./outputImages");
 
@@ -321,12 +357,13 @@ impl Rays {
             self.propagation_time.extend( vec![0.0;angle.len()] );
     } // Appends data of new rays to the vector fields under Rays.
 
-    fn step(&mut self, dt: f64, simulation_x_limit: [f64;2], simulation_y_limit: [f64;2]) -> () {
+    fn step<F: SingleInputFunction>(&mut self, dt: f64, boundaries: &mut Vec<Boundary<F>>, simulation_x_limit: [f64;2], simulation_y_limit: [f64;2]) -> () {
         let mut new_x_pos: f64;
         let mut new_y_pos: f64;
         let mut i: usize = 0;
 
         while i != self.x_pos.len() {
+            // Removes data if it leaves the simulation range
             if (self.x_pos[i] < simulation_x_limit[0]) || (self.x_pos[i] > simulation_x_limit[1]) || (-self.y_pos[i] < simulation_y_limit[0])  || (-self.y_pos[i] > simulation_y_limit[1]) {
                 self.angle.remove(i);
                 self.x_pos.remove(i);
@@ -334,24 +371,24 @@ impl Rays {
                 self.intensity.remove(i);
                 self.step_vector.remove(i);
                 self.frequency.remove(i);
-                // Removes data if it leaves the simulation range
+                self.propagation_time.remove(i);
             } else { 
-                self.propagation_time[i] += dt;
-                new_x_pos = self.x_pos[i] + self.step_vector[i] * material_speed(self.y_pos[i],self.x_pos[i]) * self.angle[i].sin();
-                new_y_pos = self.y_pos[i] + self.step_vector[i] * material_speed(self.y_pos[i],self.x_pos[i]) * self.angle[i].cos();
                 // Caluclates the new position of each ray after 1 time step
+                self.propagation_time[i] += dt;
+                new_x_pos = self.x_pos[i] + self.step_vector[i] * self.ray_speed(self.x_pos[i],self.y_pos[i], boundaries) * self.angle[i].sin();
+                new_y_pos = self.y_pos[i] + self.step_vector[i] * self.ray_speed(self.x_pos[i],self.y_pos[i], boundaries) * self.angle[i].cos();
 
-                if material_speed(new_y_pos, new_x_pos) > material_speed(self.y_pos[i], self.x_pos[i]) {
-                    let critical_angle : f64 = (material_speed(self.y_pos[i], self.x_pos[i])/material_speed(new_y_pos, new_x_pos)).asin();
+                // Implement some if statement around here for reflection with boundary.
+                if self.ray_speed(new_x_pos, new_y_pos, boundaries) > self.ray_speed(self.x_pos[i], self.y_pos[i], boundaries) {
+                    let critical_angle : f64 = (self.ray_speed(self.x_pos[i], self.y_pos[i], boundaries)/self.ray_speed(new_x_pos, new_y_pos, boundaries)).asin();
+                    // Reflects the ray if its angle with the normal exceeds the critical angle.
                     if self.angle[i].abs() > critical_angle.abs() {
                         self.angle[i] = -1.0 * self.angle[i];
                         self.step_vector[i] = self.step_vector[i] * -1.0;
                     }
-                    // Reflects the ray if its angle with the normal exceeds the critical angle.
                 }
-                // Implement some if statement around here for reflection with boundary.
 
-                let preangle = material_speed(new_y_pos, new_x_pos)/material_speed(self.y_pos[i], self.x_pos[i]) * self.angle[i].sin();
+                let preangle = self.ray_speed(new_x_pos, new_y_pos, boundaries)/self.ray_speed(self.x_pos[i], self.y_pos[i], boundaries) * self.angle[i].sin();
                 self.x_pos[i] = new_x_pos;
                 self.y_pos[i] = new_y_pos;
                 self.angle[i] = preangle.asin();
@@ -365,7 +402,132 @@ impl Rays {
 
     fn output_phase(&self, index: usize) -> f64 {
         2.0 * PI * self.frequency[index] * self.propagation_time[index]
-    } // Outputs a copy of each rays x and y position - to be used in functions implemented in other structs.
+    }
+
+    fn ray_speed<F: SingleInputFunction>(&mut self, x_pos: f64, y_pos: f64, boundaries: &mut Vec<Boundary<F>>) -> f64 {
+        let mut current_boundary: Option<usize> = None;
+        let velocity_air: f64 = 343.0; // m s^-1
+        let mut ycase: u32 = 1;
+
+        // Filters out any None variables
+        let mut valid_boundaries: Vec<_> = boundaries
+            .iter_mut()
+            .filter(|b| b.boundary_height(x_pos).is_some())
+            .collect();
+
+        // For the cases where the is a boundary at some y position at the given x position
+        if !valid_boundaries.is_empty() {
+            
+            // Sorts valid_boundaries in order of magnitude of the output of boundary_height.unwrap()
+            valid_boundaries.sort_by(|a, b|{
+                let a_height = a.boundary_height(x_pos).unwrap();
+                let b_height = b.boundary_height(x_pos).unwrap();
+                a_height.partial_cmp(&b_height).unwrap()
+            });
+
+            // Checks if the ray is inside any boundary
+            if -y_pos < valid_boundaries[valid_boundaries.len()-1].boundary_height(x_pos).unwrap() {
+                ycase = 3; // Boundary
+
+                // Determines the boundary that the ray is in
+                for i in 0..valid_boundaries.len() {
+                    if let Some(height) = boundaries[i].boundary_height(x_pos) {
+                        if height > -y_pos { 
+                            current_boundary = Some(i);
+                            break;
+                        }
+                    }
+                }
+            } 
+            else if -y_pos > 0.0 { ycase = 2; } // Air
+            else { ycase = 1; } // Water
+
+        } else {
+            if -y_pos > 0.0 { ycase = 2; } // Air
+            else { ycase = 1; } // Water
+        }
+
+        match ycase{
+            1=>velocity_water(y_pos),
+            2=>velocity_air,
+            _=>velocity_silt(y_pos),
+        }
+    }
+}
+
+//                                                  MARK: Boundary Struct
+
+pub trait SingleInputFunction: Clone {
+    fn evaluate(&self, x: f64) -> f64;
+}
+
+impl<F> SingleInputFunction for F
+where
+    F: Fn(f64) -> f64 + Clone,
+{
+    fn evaluate(&self, x: f64) -> f64 {
+        self(x)
+    }
+}
+
+pub struct Boundary<F: SingleInputFunction> {
+    shape_function : F,
+    x_limits : [Option<f64>;2],
+    y_maximum : Option<f64>,
+    current_y : Option<f64>,
+    // material : Material,
+}
+
+impl<F: SingleInputFunction> Boundary<F> {
+    pub fn initialise(shape_function: F) -> Result<Self, &'static str>
+    where
+        F: SingleInputFunction + 'static,
+    {
+
+        Ok(Boundary{
+            shape_function: shape_function,
+            x_limits: [None, None],
+            y_maximum: Some(0.0),
+            current_y: None,
+        })
+    }
+
+    pub fn set_x_limits(&mut self, limits: [f64;2]) -> () {
+        self.x_limits = [Some(limits[0]), Some(limits[1])];
+    }
+
+    pub fn set_y_maximum(&mut self, limit: f64) -> () {
+        self.y_maximum = Some(limit);
+    }
+
+    fn boundary_height(&self, x:f64) -> Option<f64> {
+        if let [Some(x_min), Some(x_max)] = self.x_limits {
+            if x < x_min || x > x_max {
+                return None;
+            }
+        }
+
+        let mut y_boundary = self.shape_function.evaluate(x);
+
+        if let Some(y_max) = self.y_maximum {
+            if y_boundary > y_max {
+                y_boundary = y_max;
+            }
+        }
+
+        Some(y_boundary)
+    }
+}
+
+impl<F: SingleInputFunction + Clone> Clone for Boundary<F> {
+    fn clone(&self) -> Self {
+        Boundary {
+            shape_function: self.shape_function.clone(),
+            x_limits: self.x_limits,
+            y_maximum: self.y_maximum,
+            current_y: self.current_y,
+        }
+    }
 }
 
 //                                                  MARK: Grid Struct
@@ -442,7 +604,7 @@ impl Grid {
                 } // I_eff = I_1 + I_2 + ... I_N + 2 * Sum over all i,j>i ( sqrt(I_i * I_j) cos(phi_i - phi_j))
 
                 x_positions.push( (*x as f64 + 0.5) * self.square_size + self.x_range[0]);
-                y_positions.push( (*y as f64 + 0.5) * self.square_size + self.y_range[0]);
+                y_positions.push( -1.0 * ((*y as f64 + 0.5) * self.square_size + self.y_range[0]) );
                 intensities.push(superimposed_intensity);
                 // Appends data to output. Position data is converted to output the centre of its grid square.
             }
@@ -451,109 +613,6 @@ impl Grid {
         // Return a tuple containing the vectors of x positions, y positions, intensities, and phase shifts
     }
 }
-
-
-//                                             Ignore below for now
-
-/* pub struct Boundary {
-    x_limits : [f64;2],
-    boundary_function : String,
-    in_silt : bool,
-}
-
-impl Boundary {
-    
-    pub fn initialise(x_limits: [f64;2]) -> Self {
-        if x_limits[0] >= x_limits[1] {
-            eprintln!("Error: x_limits[0] must be less than x_limits[1].");
-            std::process::exit(1);
-        } // Ensures that the boundarys lower limit is less than its upper limit in the x-dimension
-        Self {
-            x_limits : x_limits,
-            boundary_function : "y = 2000.0".to_string(),
-            in_silt : false,
-        }
-    } // Initialisation function to define the fields inside of Boundary after undergoing necessary error checks.
-
-    pub fn boundary_height(&mut self, x_pos: f64) -> f64 {
-        let mut height: f64 = 0.0;
-        if x_pos >= self.x_limits[0] && x_pos <= self.x_limits[1] {
-            height = 2000.0;
-        }      
-        height
-    } // Defines the height of the silt boundary at a given x position (convert to 'boundary_function' dependance later).
-
-    pub fn material_speed(&mut self, y_pos: f64, x_pos: f64) -> f64 {
-        let ycase: u32;
-        let velocity_air: f64 = 343.0; // m s^-1
-
-        if y_pos <= self.boundary_height(x_pos) {
-            ycase = 3;
-        } else if y_pos > 0.0 {
-            ycase = 2
-        } else {
-            ycase = 1
-        }
-
-        match ycase{
-            1=>velocity_water(y_pos),
-            2=>velocity_air,
-            3=>velocity_silt(y_pos, 0.1289E9),   //please change this to variable modulusoffrigidity 0.1289E9
-            _=>300.0,
-        }
-    }
-} */
-
-//                                             MARK: Material Functions
-
-pub fn material_speed(depth: f64, x: f64) -> f64 {
-    let y: f64 = depth;
-    let result: f64;
-    let mut x_inside_boundary: bool;
-    let mut y_inside_boundary: bool;
-    let x_boundary: f64 = 1000.0;
-    let y_boundary: f64 = 2000.0;
-    let seasurface: f64 = 0.0;
-    let mut v: f64; //local velocity
-    let ycase: u32;
-    let velocity_air: f64 = 343.0;
-    if x.abs() < x_boundary {
-        x_inside_boundary= true;
-    }
-    else {
-        x_inside_boundary= false;
-    }
- 
-    if y < y_boundary{ //checks above ocean floor
-        if y > seasurface { // checks below sea surface
-            ycase = 1;
-            //under the water
-        }
-        else {
-            ycase = 2; 
-            //outside the water
-        }
-        
-    }
-    else {
-        ycase = 3; //outside boundary
-    }
-
-    if x_inside_boundary == true { // & means and.
-        //velocity_water(y)
-        match ycase{
-            1=>velocity_water(y),
-            2=>velocity_air,
-            3=>velocity_silt(y),   //please change this to variable modulusoffrigidity 0.1289E9
-            _=>300.0,
-        }
-    }
-    else{
-        velocity_silt(y)
-    }
-}
-
-
 
 fn velocity_water(depth:f64) -> f64 {
     let salinity: f64=22.0;
@@ -580,24 +639,19 @@ turbidite_areas_velocity
 fn temperature_at_depth(depth: f64) -> f64 {
     
     let surface_temp: f64 = 20.0;  // degrees C
-    let middle_temp: f64 = 4.0;  // degrees C
-    let bottom_temp:f64 = 3.0;  // degrees C
+    let bottom_temp:f64 = 4.0;  // degrees C
     let thermocline_start:f64 = 200.0;  // metres //temp is constant from 0-200m
     let thermocline_end:f64 = 1000.0;  // metres
-    let thermocline_start2:f64 = 1000.0;  // metres 
-    let thermocline_end2:f64 = 5000.0;  // metres
 
   //constant temperature up to 200m based on literature - thermocline start depth
-   if depth <= thermocline_start {
+    if depth <= thermocline_start {
         surface_temp
     } else if depth >= thermocline_end {
-        // Linear interpolation beyond the thermocline
-        let fraction2 = (depth - thermocline_start2) / (thermocline_end2 - thermocline_start2);
-        middle_temp + fraction2 * (bottom_temp - middle_temp)
+        bottom_temp
     } else {
         // Linear interpolation within the thermocline
         let fraction = (depth - thermocline_start) / (thermocline_end - thermocline_start);
-        surface_temp + fraction * (middle_temp - surface_temp)
+        surface_temp + fraction * (bottom_temp - surface_temp)
     }
 }
 
