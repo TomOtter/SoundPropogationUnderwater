@@ -1,10 +1,5 @@
 use std::{
-    any::type_name,
-    collections::HashMap,
-    fs::{self, File},
-    io::prelude::*,
-    path::Path,
-    process::{Command, Output} 
+    any::type_name, cmp::Ordering, collections::HashMap, fmt::format, fs::{self, File}, io::prelude::*, path::Path, process::{Command, Output} 
 };
 
 pub const PI: f64 = 3.14159265358979323846264338327950288_f64;
@@ -23,7 +18,7 @@ pub struct Simulation<F: SingleInputFunction> {
 
 impl<F: SingleInputFunction> Simulation<F> {
 
-    pub fn initialise(dt: f64, square_size: f64, simulation_x_range: [f64;2], simulation_y_range: [f64;2]) -> Self {
+    pub fn new(dt: f64, square_size: f64, simulation_x_range: [f64;2], simulation_y_range: [f64;2]) -> Self {
         if dt <= 0.0 {
             eprintln!("Error: dt must be a positive, non-zero, float.");
             std::process::exit(1);
@@ -55,7 +50,7 @@ impl<F: SingleInputFunction> Simulation<F> {
     where
         F: SingleInputFunction + 'static,
     {
-        let new_boundary = Boundary::initialise(shape_function);
+        let new_boundary = Boundary::initialise(Box::new(shape_function));
         self.boundaries.push( new_boundary.unwrap() );
     }
 
@@ -106,7 +101,7 @@ impl<F: SingleInputFunction> Simulation<F> {
                     // Adds the intensity and phase shift to a specific 'grid square' (location defined by ray position).
                 }
                 let (xpos, ypos, intensity) = self.grid.output_data();
-                self.output(xpos, ypos, intensity, "/dataset", i / frame_spacing);
+                self.output(xpos, ypos, intensity, format!("/dataset{}", i / frame_spacing));
                 // Outputs the intensitys at each grid square to a file
             }
         } // Time loop which pushes each ray by one step and outputs the new positions each iteration.
@@ -135,7 +130,7 @@ impl<F: SingleInputFunction> Simulation<F> {
         } // Create the new directory
     }
 
-    fn output(&mut self, xpos: Vec<f64>, ypos: Vec<f64>, intensity: Vec<f64>, filename: &str, file_count: i32) -> () {
+    fn output(&mut self, xpos: Vec<f64>, ypos: Vec<f64>, intensity: Vec<f64>, filename: String) -> () {
             let mut output = String::new();
             // Create a string to hold the output for this iteration
 
@@ -148,7 +143,7 @@ impl<F: SingleInputFunction> Simulation<F> {
             let folder_path = "./outputdata";
             // Define the folder path where output files will be stored
 
-            let file_name = format!("{}{}{}.txt", folder_path, filename, file_count);
+            let file_name = format!("{}{}.txt", folder_path, filename);
             // Define the file name with the folder path and the index 'i'
     
             let mut file = match File::create(&file_name) {
@@ -165,7 +160,7 @@ impl<F: SingleInputFunction> Simulation<F> {
             } // Write the output string to the file
     }
 
-    pub fn gif(&mut self, duration: f64, dt: f64, frames: i32) -> Output {
+    pub fn generate_gif(&mut self, duration: f64, dt: f64, frames: i32) -> Output {
         if frames as f64 > (duration / dt) {
             eprintln!("Error: There is not enough time steps to accomodate the requested number of frames. Consider decreasing dt or frames.");
             std::process::exit(1);
@@ -197,16 +192,15 @@ impl<F: SingleInputFunction> Simulation<F> {
             std::process::exit(1);
         } // Terminates the program if the directory does not contain .txt files.
 
-        let size = 1000 * self.boundaries.len();
-        let mut boundary_x: Vec<f64> = Vec::with_capacity(size);
-        let mut boundary_y: Vec<f64> = Vec::with_capacity(size);
         for i in 0..self.boundaries.len() {
-            for j in 0..999 {
-                boundary_x.push(j as f64 * (self.grid.x_range[1] - self.grid.x_range[0]) / 1000.0 + self.grid.x_range[0]);
-                boundary_y.push(self.boundaries[i].boundary_height(*boundary_x.last().unwrap()).unwrap());
+            let mut boundary_x = vec![0.0 ; 1000];
+            let mut boundary_y = vec![0.0 ; 1000];
+            for j in 0..1000 {
+                boundary_x[j] = j as f64 * (self.grid.x_range[1] - self.grid.x_range[0]) / 1000.0 + self.grid.x_range[0];
+                boundary_y[j] = self.boundaries[i].boundary_height(boundary_x[j]).unwrap();
             }
+            self.output(boundary_x, boundary_y, vec![0.0 ; 1000], format!("/boundary{}", i));
         }
-        self.output(boundary_x, boundary_y, vec![0.0 ; size], "/boundary", 0);
         
         self.create_folder("./outputImages");
 
@@ -412,16 +406,24 @@ impl Rays {
         // Filters out any None variables
         let mut valid_boundaries: Vec<_> = boundaries
             .iter_mut()
-            .filter(|b| b.boundary_height(x_pos).is_some())
+            .filter(|b| {
+                if let Some(height) = b.boundary_height(x_pos) {
+                    // Filter out NaN and infinite values
+                    height.is_finite()
+                } else {
+                    // If the height is None, consider it invalid
+                    false
+                }
+            })
             .collect();
 
         // For the cases where the is a boundary at some y position at the given x position
         if !valid_boundaries.is_empty() {
             
-            // Sorts valid_boundaries in order of magnitude of the output of boundary_height.unwrap()
-            valid_boundaries.sort_by(|a, b|{
-                let a_height = a.boundary_height(x_pos).unwrap();
-                let b_height = b.boundary_height(x_pos).unwrap();
+            // // Sorts valid_boundaries in order of magnitude of the output of boundary_height.unwrap()
+            valid_boundaries.sort_by(|a, b| {
+                let a_height = a.boundary_height(x_pos).unwrap_or_default();
+                let b_height = b.boundary_height(x_pos).unwrap_or_default();
                 a_height.partial_cmp(&b_height).unwrap()
             });
 
@@ -471,7 +473,7 @@ where
 }
 
 pub struct Boundary<F: SingleInputFunction> {
-    shape_function : F,
+    shape_function : Box<F>,
     x_limits : [Option<f64>;2],
     y_maximum : Option<f64>,
     current_y : Option<f64>,
@@ -479,7 +481,7 @@ pub struct Boundary<F: SingleInputFunction> {
 }
 
 impl<F: SingleInputFunction> Boundary<F> {
-    pub fn initialise(shape_function: F) -> Result<Self, &'static str>
+    pub fn initialise(shape_function: Box<F>) -> Result<Self, &'static str>
     where
         F: SingleInputFunction + 'static,
     {

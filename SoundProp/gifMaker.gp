@@ -2,29 +2,29 @@
 
 pwd
 
-set term gif animate delay 4 size 600, 600
+set term gif animate delay 4 size 600,600
 
 # Define input and output paths
-infile = ".\\outputdata\\dataset"
-outfile = ".\\outputImages\\imageGif.gif"
-boundary = ".\\outputdata\\boundary0"
+infile = "./outputdata/dataset"
+outfile = "./outputImages/imageGif.gif"
+boundary = "./outputdata/boundary"
 
-set xrange [-1500 : 1500]
-set yrange [-2000 : 1000]
-set cbrange [0:0.00004]
+set xrange [-1500:1500]
+set yrange [-2000:1000]
+# set cbrange [0:0.00004]
 
 # Output to GIF file
-set out outfile
+set output outfile
 
-limit = 100
+boundary_limit = 2
 
 do for [i = 0:limit-1] {
-    plot infile.i.".txt" using 1:2:3 with points pt 7 ps 1 palette title sprintf("Ray at frame %.2f", i), \
-         boundary.".txt" using 1:2 with lines lc "black" lw 2 title sprintf("Boundary")
+    plot infile.sprintf("%d.txt", i) using 1:2:3 with points pt 7 ps 1 palette title sprintf("Ray at frame %d", i), \
+        for [j = 0:boundary_limit-1] boundary.sprintf("%d.txt", j) using 1:2 with lines lw 2 title sprintf("Boundary %d", j)
 }
 
 # Close the output file
-set out
+set output
 
 
 

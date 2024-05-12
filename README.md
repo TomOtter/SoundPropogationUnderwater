@@ -34,10 +34,10 @@ cargo add SoundProp --git https://github.com/TomOtter/SoundPropogationUnderwater
 
 <h2> Creating your simulation </h2>
 
-The first step in creating your own simulation requires you to define a mutable variable to store all of the simulation data using the Simulation::initialise function. This function takes 3 variables: square_size, simulation_x_range and simulation_y_range.
+The first step in creating your own simulation requires you to define a mutable variable to store all of the simulation data using the Simulation::new function. This function takes 3 variables: square_size, simulation_x_range and simulation_y_range.
 
 ```Rust
-let mut my_simulation = Simulation::initialise(
+let mut my_simulation = Simulation::new(
     square_size,            // f64
     simulation_x_range,     // [f64;2]
     simulation_y_range,     // [f64;2]
@@ -52,15 +52,18 @@ When outputting data, the rays are appended into a grid of squares, between the 
 
 <h3> Defining boundaries </h3>
 
-To set your simulation boundaries, you should use Simulation::add_boundary. This function requires you to input your own function of x to set the shape of your boundary. 
+To set your simulation boundaries, you should use Simulation::add_boundary. This function requires you to input your own function of x to set the shape of your boundary.
 
 ```Rust
+
+let shape_function: fn(f64) -> f64 = // ...
+
 my_simulation.add_boundary(
     shape_function,         // dyn fn
 );
 ```
 
-To write your function, you must first define your singular input parameter |x: f64| followed by an expression. For a boundary shape of y = x<sup>2</sup>, you would lay it out as: |x: f64| x.powi(2).
+To write your function, you must first specify that it is of type fn(f64) -> f64 and then your singular input parameter |x: f64| followed by an expression. For a boundary shape of y = x<sup>2</sup>, you would lay it out as: |x: f64| x.powi(2).
 
 It is also possible to customise the limits of your previously set boundary. The initial boundary definition sets the boundary to have a maximum y position of 0.0 m and it has no limits in the x-axis. You can overwrite these limits using:
 
@@ -99,10 +102,10 @@ my_simulation.add_source(
 
 <h3> Running the simulation and producing a GIF </h3>
 
-Currently, there is no option to conduct the simualtion without producing a GIF alongside the output data files. To create a GIF, you must call the Simulation::gif function. Besides the variable holding all simulation data, the function takes 3 inputs: duration, dt and frames.
+Currently, there is no option to conduct the simualtion without producing a GIF alongside the output data files. To create a GIF, you must call the Simulation::generate_gif function. Besides the variable holding all simulation data, the function takes 3 inputs: duration, dt and frames.
 
 ```rust
-my_simulation.gif(
+my_simulation.generate_gif(
     duration,       // f64
     dt,             // f64
     frames,         // i32
@@ -123,13 +126,18 @@ use ray_trace::{
 
 
 mod ray_trace;
+// Inputs our 'ray_trace' module to this file.
 
 pub const PI: f64 = 3.14159265358979323846264338327950288_f64;
 
 fn main() -> std::io::Result<()> {
+    let boundary1: fn(f64) -> f64 = |x| -1.0 * (x / 10.0).powi(2) + 1500.0;
+    let boundary2: fn(f64) -> f64 = |x| (x / 220.0).powi(4) - 1500.0;
 
-    let mut sound_prop = Simulation::initialise(0.01, 5.0, [-1500.0,1500.0], [-2000.0,1000.0]);
-    sound_prop.add_boundary(|x: f64| (x/30.0).powi(2) - 1500.0);
+    let mut sound_prop = Simulation::new(0.01, 5.0, [-1500.0,1500.0], [-2000.0,1000.0]);
+    sound_prop.add_boundary(boundary1);
+    sound_prop.y_upper_limit(-500.0);
+    sound_prop.add_boundary(boundary2);
     sound_prop.add_source(-PI, PI, 1000, 2.0,
         20.0, [-500.0, -200.0], Point);
    sound_prop.add_source(-PI, PI, 1000, 2.0,
