@@ -101,7 +101,7 @@ impl<F: SingleInputFunction> Simulation<F> {
                     // Adds the intensity and phase shift to a specific 'grid square' (location defined by ray position).
                 }
                 let (xpos, ypos, intensity) = self.grid.output_data();
-                self.output(xpos, ypos, intensity, format!("/dataset{}", i / frame_spacing));
+                self.output(xpos, ypos, Some(intensity), format!("/dataset{}", i / frame_spacing));
                 // Outputs the intensitys at each grid square to a file
             }
         } // Time loop which pushes each ray by one step and outputs the new positions each iteration.
@@ -130,15 +130,14 @@ impl<F: SingleInputFunction> Simulation<F> {
         } // Create the new directory
     }
 
-    fn output(&mut self, xpos: Vec<f64>, ypos: Vec<f64>, intensity: Vec<f64>, filename: String) -> () {
+    fn output(&mut self, xpos: Vec<f64>, ypos: Vec<f64>, additional_data: Option<Vec<f64>>, filename: String) -> () {
             let mut output = String::new();
             // Create a string to hold the output for this iteration
 
-            for i in 0..xpos.len() {
-                output.push_str(&format!("{} {} {}\n", xpos[i], ypos[i], intensity[i]));
-                // Append position data to the output string
-
-            } // Loop through each position in the current time step
+            // Append position data to the output string
+            if let Some(intensity) = additional_data {
+                for i in 0..xpos.len() { output.push_str(&format!("{} {} {}\n", xpos[i], ypos[i], intensity[i])) }
+            } else { for i in 0..xpos.len() { output.push_str(&format!("{} {}\n", xpos[i], ypos[i])) } }
 
             let folder_path = "./outputdata";
             // Define the folder path where output files will be stored
@@ -194,12 +193,26 @@ impl<F: SingleInputFunction> Simulation<F> {
 
         for i in 0..self.boundaries.len() {
             let mut boundary_x = vec![0.0 ; 1000];
-            let mut boundary_y = vec![0.0 ; 1000];
-            for j in 0..1000 {
-                boundary_x[j] = j as f64 * (self.grid.x_range[1] - self.grid.x_range[0]) / 1000.0 + self.grid.x_range[0];
-                boundary_y[j] = self.boundaries[i].boundary_height(boundary_x[j]).unwrap();
+            let mut boundary_y: Vec<f64> = vec![0.0 ; 1000];
+            let mut index : usize = 0;
+            for j in 1..1001 {
+                boundary_x[index] = j as f64 * (self.grid.x_range[1] - self.grid.x_range[0]) / 1000.0 + self.grid.x_range[0];
+                if let Some(height) = self.boundaries[i].boundary_height(boundary_x[index]){
+                    boundary_y[index] = height;
+                    index += 1;
+                } else {
+                    if self.boundaries[i].boundary_height( (j as f64 - 1.0) * (self.grid.x_range[1] - self.grid.x_range[0]) / 1000.0 + self.grid.x_range[0] ) != None {
+                        boundary_x.remove(index);
+                        boundary_y.remove(index);
+                    } else { 
+                        boundary_y[index] = self.grid.y_range[0];
+                        index += 1;
+                    }
+                }
             }
-            self.output(boundary_x, boundary_y, vec![0.0 ; 1000], format!("/boundary{}", i));
+            boundary_x.insert(0, boundary_x[0] - (self.grid.x_range[1] - self.grid.x_range[0]) / 1000.0);
+            boundary_y.insert(0, self.grid.y_range[0]);
+            self.output(boundary_x, boundary_y, None, format!("/boundary{}", i));
         }
         
         self.create_folder("./outputImages");

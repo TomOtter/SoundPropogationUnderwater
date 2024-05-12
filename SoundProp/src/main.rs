@@ -3,7 +3,6 @@ use ray_trace::{
     SourceType::Point,
 };
 
-
 mod ray_trace;
 // Inputs our 'ray_trace' module to this file.
 
@@ -19,6 +18,7 @@ fn main() -> std::io::Result<()> {
     sound_prop.y_upper_limit(-500.0);
 
     sound_prop.add_boundary(boundary2);
+    // sound_prop.x_limits([-1250.0, 1250.0]);
 
     sound_prop.add_source(-PI, PI, 1000, 2.0,
         20.0, [-500.0, -200.0], Point);
