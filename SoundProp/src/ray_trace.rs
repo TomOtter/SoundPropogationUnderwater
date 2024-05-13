@@ -205,13 +205,16 @@ impl<F: SingleInputFunction> Simulation<F> {
                         boundary_x.remove(index);
                         boundary_y.remove(index);
                     } else { 
+
                         boundary_y[index] = self.grid.y_range[0];
                         index += 1;
                     }
                 }
             }
-            boundary_x.insert(0, boundary_x[0] - (self.grid.x_range[1] - self.grid.x_range[0]) / 1000.0);
-            boundary_y.insert(0, self.grid.y_range[0]);
+            if self.boundaries[i].boundary_height(self.grid.x_range[0]) == None {
+                boundary_x.insert(0, boundary_x[0] - (self.grid.x_range[1] - self.grid.x_range[0]) / 1000.0);
+                boundary_y.insert(0, self.grid.y_range[0]);
+            }
             self.output(boundary_x, boundary_y, None, format!("/boundary{}", i));
         }
         
