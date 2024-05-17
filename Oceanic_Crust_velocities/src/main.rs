@@ -91,6 +91,8 @@ impl StoneSoundVelocity {
             }
         }
     }
+      pub fn velocityCalculation(material: MaterialType){
+        let velocity = ((self.bulkModulus + (1.333333333333*self.shearModulus))/self.density).sqrt();
 }
 
 
