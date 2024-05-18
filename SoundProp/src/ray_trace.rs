@@ -1,6 +1,6 @@
-use std::{
-    any::type_name, cmp::Ordering, collections::HashMap, fmt::format, fs::{self, File}, io::prelude::*, path::Path, process::{Command, Output} 
+use std::{any::type_name, cmp::Ordering, collections::HashMap, fmt::format, fs::{self, File}, io::prelude::*, path::Path, process::{Command, Output}
 };
+use crate::material::{self, Material, MaterialType};
 
 pub const PI: f64 = 3.14159265358979323846264338327950288_f64;
 pub enum SourceType {
@@ -18,11 +18,7 @@ pub struct Simulation<F: SingleInputFunction> {
 
 impl<F: SingleInputFunction> Simulation<F> {
 
-    pub fn new(dt: f64, square_size: f64, simulation_x_range: [f64;2], simulation_y_range: [f64;2]) -> Self {
-        if dt <= 0.0 {
-            eprintln!("Error: dt must be a positive, non-zero, float.");
-            std::process::exit(1);
-        } // Ensures that dt is a positive, non-zero, float.
+    pub fn new(square_size: f64, simulation_x_range: [f64;2], simulation_y_range: [f64;2]) -> Self {
         let grid = Grid::initialise(square_size, simulation_x_range, simulation_y_range);
         Self {
             sources : Vec::new(),
@@ -46,11 +42,11 @@ impl<F: SingleInputFunction> Simulation<F> {
         // Adds new source to an array of sources under the Simulation struct.
     }
 
-    pub fn add_boundary(&mut self, shape_function: F) -> ()
+    pub fn add_boundary(&mut self, material: MaterialType, shape_function: F) -> ()
     where
         F: SingleInputFunction + 'static,
     {
-        let new_boundary = Boundary::initialise(Box::new(shape_function));
+        let new_boundary = Boundary::initialise(Box::new(shape_function), material);
         self.boundaries.push( new_boundary.unwrap() );
     }
 
@@ -84,10 +80,10 @@ impl<F: SingleInputFunction> Simulation<F> {
         // Defines the Rays struct with each variable inside having an appendable vector with minimum array size (beneficial for memory).
         
         for i in 0..self.sources.len() {
-            self.sources[i].create_rays(&mut self.rays, dt);
+            self.sources[i].create_rays(&mut self.rays);
         } // Compiles all of the initial data for each ray, from its sources, into one 'Rays' struct.
 
-        self.rays.bound_angles(dt);
+        self.rays.bound_angles();
 
         for i in 0..size {
             if i != 0{
@@ -197,8 +193,14 @@ impl<F: SingleInputFunction> Simulation<F> {
             let mut index : usize = 0;
             for j in 1..1001 {
                 boundary_x[index] = j as f64 * (self.grid.x_range[1] - self.grid.x_range[0]) / 1000.0 + self.grid.x_range[0];
-                if let Some(height) = self.boundaries[i].boundary_height(boundary_x[index]){
-                    boundary_y[index] = height;
+                if let Some(height) = self.boundaries[i].boundary_height(boundary_x[index]) {
+                    if height.is_nan() {
+                        boundary_y[index] = self.grid.y_range[0];
+                    } else if height.is_infinite() {
+                        boundary_y[index] = self.grid.y_range[1];
+                    } else {
+                        boundary_y[index] = height;
+                    }
                     index += 1;
                 } else {
                     if self.boundaries[i].boundary_height( (j as f64 - 1.0) * (self.grid.x_range[1] - self.grid.x_range[0]) / 1000.0 + self.grid.x_range[0] ) != None {
@@ -280,7 +282,7 @@ impl Source {
         }
     } // Initialisation function to define the fields inside of Struct after undergoing necessary error checks.
 
-    fn create_rays(&mut self, initial_rays: &mut Rays, dt: f64) {
+    fn create_rays(&mut self, initial_rays: &mut Rays) {
         let mut initial_angles: Vec<f64> = Vec::with_capacity(self.number_of_rays);
         match self.source_type {
             SourceType::Point => {
@@ -299,7 +301,7 @@ impl Source {
                     vec![-1.0 * self.location[1];self.number_of_rays],
                     vec![local_ray_intensity;self.number_of_rays],
                     vec![self.frequency;self.number_of_rays],
-                    vec![dt;self.number_of_rays])
+                    vec![1.0;self.number_of_rays])
             }
             SourceType::Line => {
                 println!("Not yet implemented");
@@ -334,23 +336,23 @@ impl Rays {
         }
     } // Initialisation function to define the initial size of the fields in Rays.
     
-    fn bound_angles(&mut self, dt: f64) {
+    fn bound_angles(&mut self) {
         for i in 0..self.angle.len() {
 
             if self.angle[i] > PI/2.0 {
-                self.step_vector[i] = -1.0 * dt;
+                self.step_vector[i] = -1.0;
                 self.angle[i] = -1.0 * (PI - self.angle[i])
             }
             else if self.angle[i] < -PI/2.0 {
-                self.step_vector[i] = -1.0 * dt;
+                self.step_vector[i] = -1.0;
                 self.angle[i] = -1.0 * (-PI - self.angle[i])
             }
             if self.angle[i] > 3.0 * PI/2.0 {
-                self.step_vector[i] = dt;
+                self.step_vector[i] = 1.0;
                 self.angle[i] = 1.0 * (3.0 * PI/2.0 - self.angle[i])
             }
             else if self.angle[i] < -3.0 * PI/2.0 {
-                self.step_vector[i] = dt;
+                self.step_vector[i] = 1.0;
                 self.angle[i] = 1.0 * (-3.0 * PI/2.0 - self.angle[i])
             }
         }
@@ -385,8 +387,8 @@ impl Rays {
             } else { 
                 // Caluclates the new position of each ray after 1 time step
                 self.propagation_time[i] += dt;
-                new_x_pos = self.x_pos[i] + self.step_vector[i] * self.ray_speed(self.x_pos[i],self.y_pos[i], boundaries) * self.angle[i].sin();
-                new_y_pos = self.y_pos[i] + self.step_vector[i] * self.ray_speed(self.x_pos[i],self.y_pos[i], boundaries) * self.angle[i].cos();
+                new_x_pos = self.x_pos[i] + self.step_vector[i] * dt * self.ray_speed(self.x_pos[i],self.y_pos[i], boundaries) * self.angle[i].sin();
+                new_y_pos = self.y_pos[i] + self.step_vector[i] * dt * self.ray_speed(self.x_pos[i],self.y_pos[i], boundaries) * self.angle[i].cos();
 
                 // Implement some if statement around here for reflection with boundary.
                 if self.ray_speed(new_x_pos, new_y_pos, boundaries) > self.ray_speed(self.x_pos[i], self.y_pos[i], boundaries) {
@@ -417,7 +419,7 @@ impl Rays {
     fn ray_speed<F: SingleInputFunction>(&mut self, x_pos: f64, y_pos: f64, boundaries: &mut Vec<Boundary<F>>) -> f64 {
         let mut current_boundary: Option<usize> = None;
         let velocity_air: f64 = 343.0; // m s^-1
-        let mut ycase: u32 = 1;
+        let mut ycase: u32;
 
         // Filters out any None variables
         let mut valid_boundaries: Vec<_> = boundaries
@@ -449,11 +451,11 @@ impl Rays {
 
                 // Determines the boundary that the ray is in
                 for i in 0..valid_boundaries.len() {
-                    if let Some(height) = boundaries[i].boundary_height(x_pos) {
-                        if height > -y_pos { 
+                    if let Some(height) = valid_boundaries[i].boundary_height(x_pos) {
+                        if height > -y_pos && i != valid_boundaries.len() {
                             current_boundary = Some(i);
                             break;
-                        }
+                        } else if i == valid_boundaries.len() { current_boundary = Some(valid_boundaries.len()) }
                     }
                 }
             } 
@@ -468,7 +470,7 @@ impl Rays {
         match ycase{
             1=>velocity_water(y_pos),
             2=>velocity_air,
-            _=>velocity_silt(y_pos),
+            _=>valid_boundaries[current_boundary.unwrap()].material.calculate_velocity(y_pos),
         }
     }
 }
@@ -493,20 +495,22 @@ pub struct Boundary<F: SingleInputFunction> {
     x_limits : [Option<f64>;2],
     y_maximum : Option<f64>,
     current_y : Option<f64>,
-    // material : Material,
+    material : Material,
 }
 
 impl<F: SingleInputFunction> Boundary<F> {
-    pub fn initialise(shape_function: Box<F>) -> Result<Self, &'static str>
+    pub fn initialise(shape_function: Box<F>, material: MaterialType) -> Result<Self, &'static str>
     where
         F: SingleInputFunction + 'static,
     {
+        let material_properites = Material::define(material);
 
         Ok(Boundary{
             shape_function: shape_function,
             x_limits: [None, None],
             y_maximum: Some(0.0),
             current_y: None,
+            material: material_properites,
         })
     }
 
@@ -544,6 +548,7 @@ impl<F: SingleInputFunction + Clone> Clone for Boundary<F> {
             x_limits: self.x_limits,
             y_maximum: self.y_maximum,
             current_y: self.current_y,
+            material: self.material,
         }
     }
 }
@@ -619,7 +624,7 @@ impl Grid {
                         }
                     }
                     superimposed_intensity += grid_intensities[i];
-                } // I_eff = I_1 + I_2 + ... I_N + 2 * Sum over all i,j>i ( sqrt(I_i * I_j) cos(phi_i - phi_j))
+                } // I_eff = Sum over all i=1...N (I_i) + 2 * Sum over all i,j>i ( sqrt(I_i * I_j) cos(phi_i - phi_j))
 
                 x_positions.push( (*x as f64 + 0.5) * self.square_size + self.x_range[0]);
                 y_positions.push( -1.0 * ((*y as f64 + 0.5) * self.square_size + self.y_range[0]) );
@@ -628,7 +633,7 @@ impl Grid {
             }
         }
         (x_positions, y_positions, intensities)
-        // Return a tuple containing the vectors of x positions, y positions, intensities, and phase shifts
+        // Return a tuple containing the vectors of x positions, y positions, intensities
     }
 }
 
@@ -640,19 +645,6 @@ fn velocity_water(depth:f64) -> f64 {
     let speed: f64= 1402.5+5.0*temp-5.44e-2*temp*temp+2.1e-4*temp*temp+1.33*salinity-1.23e-2*salinity*temp+8.7e-5*salinity*temp*temp+1.56e-2*depth+2.55e-7*depth*depth-7.3e-12*depth*depth*depth+1.2e-6*depth*(latitude-45.0)-9.5e-13*temp*depth*depth*depth+3e-7*temp*temp*depth+1.43e-5*salinity*depth;
 speed
 }
-
-
-
-fn velocity_silt(depth:f64) -> f64 {
-    let turbidite_areas_velocity:f64= (1.511+ 1.304*depth*0.001 - 0.257*depth*depth*depth*0.001*0.001*0.001)*1000.0;
-    let siliceous_sediment_velocity:f64 = (1.509 + 0.869*depth*0.001 - 0.267*depth*depth*0.001*0.001)*1000.0;
-    let calcerous_sediments_velocity:f64 = (1.559 + 1.713*depth*0.001 - 0.374*depth*depth*0.001*0.001)*1000.0;
-    let sand_velocity:f64=1626.0; 
-turbidite_areas_velocity
-}
-
-
-
 
 fn temperature_at_depth(depth: f64) -> f64 {
     

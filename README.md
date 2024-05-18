@@ -52,16 +52,22 @@ When outputting data, the rays are appended into a grid of squares, between the 
 
 <h3> Defining boundaries </h3>
 
-To set your simulation boundaries, you should use Simulation::add_boundary. This function requires you to input your own function of x to set the shape of your boundary.
+To set your simulation boundaries, you should use Simulation::add_boundary. This function requires you to input a boundary material type and your own function of x to set the shape of your boundary.
 
 ```Rust
 
 let shape_function: fn(f64) -> f64 = // ...
 
 my_simulation.add_boundary(
+    material_type,          // MaterialType
     shape_function,         // dyn fn
 );
 ```
+
+Our library comes with a large selection of MaterialTypes, such as: 
+
+- **Stone Materials:** Basalt, Granite, Quartzite, Gneiss, Schist, Marble, Limestone, Shale, Sandstone
+- **Other Materials:** TurbiditeArea, SiliceousSediment, CalcerousSediment, Sand
 
 To write your function, you must first specify that it is of type fn(f64) -> f64 and then your singular input parameter |x: f64| followed by an expression. For a boundary shape of y = x<sup>2</sup>, you would lay it out as: |x: f64| x.powi(2).
 
@@ -119,37 +125,48 @@ my_simulation.generate_gif(
 <h2> Example simulation </h2>
 
 ```rust
-use ray_trace::{
-    Simulation,
-    SourceType::Point,
+mod material;
+mod ray_trace;
+// Inputs our 'material' and 'ray_trace' module to this file.
+
+use {
+    material::MaterialType::*,
+    ray_trace::{Simulation, SourceType::*},
+    std::time,
 };
 
-
-mod ray_trace;
-// Inputs our 'ray_trace' module to this file.
 
 pub const PI: f64 = 3.14159265358979323846264338327950288_f64;
 
 fn main() -> std::io::Result<()> {
-    let boundary1: fn(f64) -> f64 = |x| -1.0 * (x / 10.0).powi(2) + 1500.0;
+    use std::time::Instant;
+    let now = Instant::now();
+    let boundary1: fn(f64) -> f64 = |x| -1.0 * (x / 10.0).powi(2) + 1000.0;
     let boundary2: fn(f64) -> f64 = |x| (x / 220.0).powi(4) - 1500.0;
 
-    let mut sound_prop = Simulation::new(0.01, 5.0, [-1500.0,1500.0], [-2000.0,1000.0]);
-    sound_prop.add_boundary(boundary1);
+    let mut sound_prop = Simulation::new(5.0, [-1500.0,1500.0], [-2000.0,1000.0]);
+
+    sound_prop.add_boundary(Granite, boundary1);
     sound_prop.y_upper_limit(-500.0);
-    sound_prop.add_boundary(boundary2);
+    sound_prop.x_limits([-400.0, 400.0]);
+
+    sound_prop.add_boundary(TurbiditeArea, boundary2);
+
     sound_prop.add_source(-PI, PI, 1000, 2.0,
         20.0, [-500.0, -200.0], Point);
-   sound_prop.add_source(-PI, PI, 1000, 2.0,
+   sound_prop.add_source(-PI, PI, 1000, 4.0,
         10.0, [500.0, -200.0], Point);
-   sound_prop.gif(2.0, 0.005, 100);
 
+   sound_prop.generate_gif(2.0, 0.005, 100);
+
+   let elapsed = now.elapsed();
+    println!("Elapsed: {:.2?}", elapsed);
     Ok(())
     
 }
 ```
 
-This example creates two point sound sources, both 500 m away from the centre of the water body and 100 m deep, with the intensity of the sound waves at each source being 2 A / m<sup>2</sup>. 1000 sound waves are then created at each source, with their initial angle of propagation having an even separation between &plusmn; &pi; across all waves at the source. At the first source, the frequency of the outputted sound waves is 20.0 Hz whereas the second outputs waves with a frequency of 10.0 Hz.
+This example creates a simulation with a granite (Boundary 0) & turbidite area (Boundary 1) boundary as well as two point sound sources, both 500 m away from the centre of the water body and 100 m deep, with the intensity of the sound waves at each source being 2 A / m<sup>2</sup>. 1000 sound waves are then created at each source, with their initial angle of propagation having an even separation between &plusmn; &pi; across all waves at the source. At the first source, the frequency of the outputted sound waves is 20.0 Hz whereas the second outputs waves with a frequency of 10.0 Hz.
 
 The rays are propagated outwards from these sources for 2.0 s and their components are updated every 0.005 s. The data is then outputted across 100 different files, showing the rays positions and intensities every 0.02 s, and as a gif.
 
