@@ -9,47 +9,17 @@ infile = "./outputdata/dataset"
 outfile = "./outputImages/imageGif.gif"
 boundary = "./outputdata/boundary"
 
-set xrange [-1500:1500]
-set yrange [-2000:1000]
+set xrange [x_min:x_max]
+set yrange [y_min:y_max]
 # set cbrange [0:0.00004]
 
 # Output to GIF file
 set output outfile
 
-boundary_limit = 2
-
-do for [i = 0:limit-1] {
+do for [i = 0:frames-1] {
     plot infile.sprintf("%d.txt", i) using 1:2:3 with points pt 7 ps 1 palette title sprintf("Ray at frame %d", i), \
-        for [j = 0:boundary_limit-1] boundary.sprintf("%d.txt", j) using 1:2 with lines lw 2 title sprintf("Boundary %d", j)
+        for [j = 0:boundaries-1] boundary.sprintf("%d.txt", j) using 1:2 with lines lw 2 title sprintf("Boundary %d", j)
 }
 
 # Close the output file
 set output
-
-
-
-#Heat map code - Does need fixing (currently just plots 1 large box around all data and leaves the rest blank).
-# pwd
-
-# set term gif animate delay 4 size 600, 600
-
-# set view map
-# set dgrid3d
-# set pm3d interpolate 10,10
-# set palette defined (0 'white', 1 'blue')
-
-# infile = sprintf("%s%s",".\\outputdata\\", "dataset")
-
-# outfile = sprintf("%s%s%s",".\\outputImages", "\\imageGif", ".gif")
-
-# set xrange [-1500 : 1500]
-# set yrange [-2000 : 1000]
-# set cbrange [0:0.00004]  # Set the color range from 0.966 to 1
-
-
-# set out outfile 
-
-# limit = 100
-
-# do for [i = 0: limit-1] {
-#     splot infile.i.".txt" using 1:2:3 with pm3d title sprintf("Frame: %.2f", i)}

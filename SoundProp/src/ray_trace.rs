@@ -107,6 +107,14 @@ impl<F: SingleInputFunction> Simulation<F> {
 
     fn create_folder(&mut self, folder_path: &str) {
         let path = Path::new(folder_path);
+
+        // Check if the provided path is absolute
+        if path.is_absolute() {
+            eprintln!("Error: Absolute paths are not allowed.");
+            std::process::exit(1);
+        }
+
+        // Close and delete the directory
         if path.exists() {
             drop(fs::read_dir(folder_path));
             match fs::remove_dir_all(folder_path) {
@@ -115,15 +123,16 @@ impl<F: SingleInputFunction> Simulation<F> {
                     eprintln!("Error deleting directory {}: {}", folder_path, err);
                     std::process::exit(1);
                 }
-            } // Close and delete the directory
+            }
         }
+        // Create the new directory
         match fs::create_dir(folder_path) {
             Ok(_) => (),
             Err(err) => {
                 eprintln!("Error creating directory {}: {}", folder_path, err);
                 std::process::exit(1);
             }
-        } // Create the new directory
+        }
     }
 
     fn output(&mut self, xpos: Vec<f64>, ypos: Vec<f64>, additional_data: Option<Vec<f64>>, filename: String) -> () {
@@ -187,6 +196,7 @@ impl<F: SingleInputFunction> Simulation<F> {
             std::process::exit(1);
         } // Terminates the program if the directory does not contain .txt files.
 
+        // Adds the data for each boundary for the GIF
         for i in 0..self.boundaries.len() {
             let mut boundary_x = vec![0.0 ; 1000];
             let mut boundary_y: Vec<f64> = vec![0.0 ; 1000];
@@ -223,7 +233,8 @@ impl<F: SingleInputFunction> Simulation<F> {
         self.create_folder("./outputImages");
 
         let length = txt_files.len();
-        let cmd = format!("runGifMAker.bat {} ",length );
+        let cmd = format!("runGifMAker.bat {} {} {} {} {} {}",
+         length, self.boundaries.len(), self.grid.x_range[0], self.grid.x_range[1], self.grid.y_range[0], self.grid.y_range[1]);
 
         if cfg!(target_os = "windows") {
             Command::new("cmd")
@@ -385,14 +396,18 @@ impl Rays {
                 self.frequency.remove(i);
                 self.propagation_time.remove(i);
             } else { 
+                let old_ray_speed = self.ray_speed(self.x_pos[i],self.y_pos[i], boundaries);
+
                 // Caluclates the new position of each ray after 1 time step
                 self.propagation_time[i] += dt;
-                new_x_pos = self.x_pos[i] + self.step_vector[i] * dt * self.ray_speed(self.x_pos[i],self.y_pos[i], boundaries) * self.angle[i].sin();
-                new_y_pos = self.y_pos[i] + self.step_vector[i] * dt * self.ray_speed(self.x_pos[i],self.y_pos[i], boundaries) * self.angle[i].cos();
+                new_x_pos = self.x_pos[i] + self.step_vector[i] * dt * old_ray_speed * self.angle[i].sin();
+                new_y_pos = self.y_pos[i] + self.step_vector[i] * dt * old_ray_speed * self.angle[i].cos();
+
+                let new_ray_speed = self.ray_speed(new_x_pos, new_y_pos, boundaries);
 
                 // Implement some if statement around here for reflection with boundary.
-                if self.ray_speed(new_x_pos, new_y_pos, boundaries) > self.ray_speed(self.x_pos[i], self.y_pos[i], boundaries) {
-                    let critical_angle : f64 = (self.ray_speed(self.x_pos[i], self.y_pos[i], boundaries)/self.ray_speed(new_x_pos, new_y_pos, boundaries)).asin();
+                if new_ray_speed > old_ray_speed {
+                    let critical_angle : f64 = (old_ray_speed/new_ray_speed).asin();
                     // Reflects the ray if its angle with the normal exceeds the critical angle.
                     if self.angle[i].abs() > critical_angle.abs() {
                         self.angle[i] = -1.0 * self.angle[i];
@@ -400,7 +415,7 @@ impl Rays {
                     }
                 }
 
-                let preangle = self.ray_speed(new_x_pos, new_y_pos, boundaries)/self.ray_speed(self.x_pos[i], self.y_pos[i], boundaries) * self.angle[i].sin();
+                let preangle = new_ray_speed / old_ray_speed * self.angle[i].sin();
                 self.x_pos[i] = new_x_pos;
                 self.y_pos[i] = new_y_pos;
                 self.angle[i] = preangle.asin();
@@ -419,7 +434,7 @@ impl Rays {
     fn ray_speed<F: SingleInputFunction>(&mut self, x_pos: f64, y_pos: f64, boundaries: &mut Vec<Boundary<F>>) -> f64 {
         let mut current_boundary: Option<usize> = None;
         let velocity_air: f64 = 343.0; // m s^-1
-        let mut ycase: u32;
+        let ycase: u32;
 
         // Filters out any None variables
         let mut valid_boundaries: Vec<_> = boundaries
@@ -438,7 +453,7 @@ impl Rays {
         // For the cases where the is a boundary at some y position at the given x position
         if !valid_boundaries.is_empty() {
             
-            // // Sorts valid_boundaries in order of magnitude of the output of boundary_height.unwrap()
+            // Sorts valid_boundaries in order of magnitude of the output of boundary_height.unwrap()
             valid_boundaries.sort_by(|a, b| {
                 let a_height = a.boundary_height(x_pos).unwrap_or_default();
                 let b_height = b.boundary_height(x_pos).unwrap_or_default();
@@ -470,7 +485,7 @@ impl Rays {
         match ycase{
             1=>velocity_water(y_pos),
             2=>velocity_air,
-            _=>valid_boundaries[current_boundary.unwrap()].material.calculate_velocity(y_pos),
+            _=>valid_boundaries[current_boundary.unwrap()].material.calculate_velocity(-y_pos),
         }
     }
 }

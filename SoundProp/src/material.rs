@@ -10,14 +10,14 @@ pub enum MaterialType {
     Limestone,
     Shale,
     Sandstone,
-    // Other Material
+    // Sediment Material
     TurbiditeArea,
     SiliceousSediment,
     CalcerousSediment,
     Sand,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub struct Material {
     material_name: MaterialType,
     shear_modulus: Option<f64>,
@@ -126,9 +126,10 @@ impl Material {
             MaterialType::Limestone |
             MaterialType::Shale |
             MaterialType::Sandstone => ((self.bulk_modulus.unwrap() + (1.333333333333 * self.shear_modulus.unwrap())) / self.density.unwrap()).sqrt(),
-            MaterialType::TurbiditeArea => (1.511+ 1.304*depth*0.001 - 0.257*depth*depth*depth*0.001*0.001*0.001)*1000.0,
-            MaterialType::SiliceousSediment => (1.509 + 0.869*depth*0.001 - 0.267*depth*depth*0.001*0.001)*1000.0,
-            MaterialType::CalcerousSediment => (1.559 + 1.713*depth*0.001 - 0.374*depth*depth*0.001*0.001)*1000.0,
+            // Sediment Materials
+            MaterialType::TurbiditeArea => (1.511+ 1.304*depth*0.001 - 0.257*(depth*0.001).powi(3))*1000.0,
+            MaterialType::SiliceousSediment => (1.509 + 0.869*depth*0.001 - 0.267*(depth*0.001).powi(2))*1000.0,
+            MaterialType::CalcerousSediment => (1.559 + 1.713*depth*0.001 - 0.374*(depth*0.001).powi(2))*1000.0,
             MaterialType::Sand => 1626.0,
         }
     }
