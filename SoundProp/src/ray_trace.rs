@@ -8,6 +8,14 @@ pub enum SourceType {
     Line,
 }
 
+
+pub fn derivative(f: fn(f64), x: f64) -> f64{
+    let h: f64 = 0.0000001;
+    let y = (f(x + h) - f(x)) / h
+
+}
+
+
 //                                               MARK: Simulation Struct
 pub struct Simulation<F: SingleInputFunction> {
     sources : Vec<Source>,
