@@ -233,8 +233,8 @@ impl<F: SingleInputFunction> Simulation<F> {
         self.create_folder("./outputImages");
 
         let length = txt_files.len();
-        let cmd = format!("runGifMAker.bat {} {} {} {} {} {}",
-         length, self.boundaries.len(), self.grid.x_range[0], self.grid.x_range[1], self.grid.y_range[0], self.grid.y_range[1]);
+        let cmd = format!("runGifMAker.bat {} {} {} {} {} {} {}",
+         length, self.boundaries.len(), self.grid.x_range[0], self.grid.x_range[1], self.grid.y_range[0], self.grid.y_range[1], duration);
 
         if cfg!(target_os = "windows") {
             Command::new("cmd")
