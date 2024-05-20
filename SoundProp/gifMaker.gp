@@ -11,10 +11,12 @@ boundary = "./outputdata/boundary"
 
 set xrange [x_min:x_max]
 set yrange [y_min:y_max]
-# set cbrange [0:0.00004]
+set cbrange [0:0.0000004]
 
 # Output to GIF file
 set output outfile
+set palette color positive
+set pm3d map
 
 do for [i = 0:frames-1] {
     plot infile.sprintf("%d.txt", i) using 1:2:3 with points pt 7 ps 1 palette title sprintf("Ray at frame %d", i), \
