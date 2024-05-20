@@ -9,10 +9,10 @@ pub enum SourceType {
 }
 
 
-pub fn derivative(f: fn(f64), x: f64) -> f64{
+pub fn derivative(f: fn(f64)->f64 , x: f64) -> f64{
     let h: f64 = 0.0000001;
-    let y = (f(x + h) - f(x)) / h
-
+    
+    (f(x + h) - f(x)) / h 
 }
 
 
