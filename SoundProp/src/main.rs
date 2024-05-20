@@ -15,22 +15,22 @@ fn main() -> std::io::Result<()> {
     use std::time::Instant;
     let now = Instant::now();
     let boundary1: fn(f64) -> f64 = |x| -1.0 * (x / 10.0).powi(2) + 1000.0;
-    let boundary2: fn(f64) -> f64 = |x| (x / 220.0).powi(4) - 1500.0;
+    let boundary2: fn(f64) -> f64 = |x| (x / 300.0).powi(4) - 3500.0;
 
-    let mut sound_prop = Simulation::new(5.0, [-1500.0,1500.0], [-2000.0,1000.0]);
+    let mut sound_prop = Simulation::new(0.75, [-2500.0,2500.0], [-4000.0,1000.0]);
 
-    sound_prop.add_boundary(Granite, boundary1);
-    sound_prop.y_upper_limit(-500.0);
-    sound_prop.x_limits([-400.0, 400.0]);
+    sound_prop.add_boundary(Sand, boundary1);
+    sound_prop.y_upper_limit(-2500.0);
+    sound_prop.x_limits([-750.0, 750.0]);
 
     sound_prop.add_boundary(TurbiditeArea, boundary2);
 
     sound_prop.add_source(-PI, PI, 1000, 2.0,
-        20.0, [-500.0, -200.0], Point);
-   sound_prop.add_source(-PI, PI, 1000, 4.0,
-        10.0, [500.0, -200.0], Point);
+        10.0, [-500.0, -500.0], Point);
+    sound_prop.add_source(-PI, PI, 1000, 2.0,
+        10.0, [500.0, -500.0], Point);
 
-   sound_prop.generate_gif(2.0, 0.005, 100);
+   sound_prop.generate_gif(4.0, 0.005, 100);
 
    let elapsed = now.elapsed();
     println!("Elapsed: {:.2?}", elapsed);

@@ -387,7 +387,7 @@ impl Rays {
 
         while i != self.x_pos.len() {
             // Removes data if it leaves the simulation range
-            if (self.x_pos[i] < simulation_x_limit[0]) || (self.x_pos[i] > simulation_x_limit[1]) || (-self.y_pos[i] < simulation_y_limit[0])  || (-self.y_pos[i] > simulation_y_limit[1]) {
+            if (self.x_pos[i] < simulation_x_limit[0]) || (self.x_pos[i] > simulation_x_limit[1]) || (-self.y_pos[i] < simulation_y_limit[0])  || (-self.y_pos[i] > simulation_y_limit[1]) || (self.intensity[i].is_finite() == false) {
                 self.angle.remove(i);
                 self.x_pos.remove(i);
                 self.y_pos.remove(i);
@@ -406,6 +406,7 @@ impl Rays {
                 let new_ray_speed = self.ray_speed(new_x_pos, new_y_pos, boundaries);
 
                 // Implement some if statement around here for reflection with boundary.
+                
                 if new_ray_speed > old_ray_speed {
                     let critical_angle : f64 = (old_ray_speed/new_ray_speed).asin();
                     // Reflects the ray if its angle with the normal exceeds the critical angle.
@@ -415,13 +416,13 @@ impl Rays {
                     }
                 }
 
-                let preangle = new_ray_speed / old_ray_speed * self.angle[i].sin();
                 self.x_pos[i] = new_x_pos;
                 self.y_pos[i] = new_y_pos;
-                self.angle[i] = preangle.asin();
+                self.angle[i] = ( new_ray_speed / old_ray_speed * self.angle[i].sin() ).asin();
 
                 let salinity = 35.0;
-                self.intensity[i] *= 1.0 - calculate_absorption(self.frequency[i], temperature_at_depth(self.y_pos[i]), salinity, self.y_pos[i]);
+                let temperature = self.temperature_at_depth(self.y_pos[i]);
+                self.intensity[i] *= 1.0 - self.calculate_absorption(self.frequency[i], temperature, salinity, self.y_pos[i]);
                 i += 1;
             }
         }
@@ -433,6 +434,7 @@ impl Rays {
 
     fn ray_speed<F: SingleInputFunction>(&mut self, x_pos: f64, y_pos: f64, boundaries: &mut Vec<Boundary<F>>) -> f64 {
         let mut current_boundary: Option<usize> = None;
+        let mut boundary_height: Option<f64> = None;
         let velocity_air: f64 = 343.0; // m s^-1
         let ycase: u32;
 
@@ -469,8 +471,12 @@ impl Rays {
                     if let Some(height) = valid_boundaries[i].boundary_height(x_pos) {
                         if height > -y_pos && i != valid_boundaries.len() {
                             current_boundary = Some(i);
+                            boundary_height = Some(height);
                             break;
-                        } else if i == valid_boundaries.len() { current_boundary = Some(valid_boundaries.len()) }
+                        } else if i == valid_boundaries.len() { 
+                            current_boundary = Some(valid_boundaries.len());
+                            boundary_height = valid_boundaries[current_boundary.unwrap()].boundary_height(x_pos);
+                        }
                     }
                 }
             } 
@@ -483,10 +489,62 @@ impl Rays {
         }
 
         match ycase{
-            1=>velocity_water(y_pos),
+            1=>self.velocity_water(-y_pos),
             2=>velocity_air,
-            _=>valid_boundaries[current_boundary.unwrap()].material.calculate_velocity(-y_pos),
+            _=>valid_boundaries[current_boundary.unwrap()].material.calculate_velocity(-y_pos - boundary_height.unwrap()),
         }
+    }
+
+    fn velocity_water(&mut self, depth:f64) -> f64 {
+        let salinity: f64=22.0;
+        let latitude: f64=43.0;
+        let temp: f64 = self.temperature_at_depth(depth);
+    
+        let speed: f64= 1402.5+5.0*temp-5.44e-2*temp.powi(2)+2.1e-4*temp.powi(2)+1.33*salinity-1.23e-2*salinity*temp+8.7e-5*salinity*temp.powi(2)+1.56e-2*depth+2.55e-7*depth.powi(2)-7.3e-12*depth.powi(3)+1.2e-6*depth*(latitude-45.0)-9.5e-13*temp*depth.powi(3)+3e-7*temp.powi(2)*depth+1.43e-5*salinity*depth;
+        speed
+    }
+
+    fn temperature_at_depth(&mut self, depth: f64) -> f64 {
+    
+        let surface_temp: f64 = 20.0;  // degrees C
+        let bottom_temp:f64 = 4.0;  // degrees C
+        let thermocline_start:f64 = 200.0;  // metres //temp is constant from 0-200m
+        let thermocline_end:f64 = 1000.0;  // metres
+    
+      //constant temperature up to 200m based on literature - thermocline start depth
+        if depth <= thermocline_start {
+            surface_temp
+        } else if depth >= thermocline_end {
+            bottom_temp
+        } else {
+            // Linear interpolation within the thermocline
+            let fraction = (depth - thermocline_start) / (thermocline_end - thermocline_start);
+            surface_temp + fraction * (bottom_temp - surface_temp)
+        }
+    }
+    
+    
+    // function to caculate absorption coefficient in seawater
+    fn calculate_absorption(&mut self, f: f64, temp: f64, salinity: f64, ddepth: f64, ) -> f64 {
+    
+        let ph: f64  = 8.0;
+       
+        let z: f64 = 10.0; // just a constant
+    
+        let depth = ddepth / 1000.0;
+    
+        let f1 = 0.91 * (salinity / 35.0).sqrt() * (temp/33.0).exp();
+        let f2 = 46.0 * (temp/18.0).exp();
+    
+        //Boric acid contribution
+        let a = 0.101 * ((f1 * f.powi(2)) / (f1.powi(2) + f.powi(2))) * ((ph - 8.0) / 0.57).exp();
+        //Magnesium Sulfate contribtion
+        let b = 0.56 * (1.0 + (temp / 76.0)) * (salinity / 35.0) * ((f2 * f.powi(2)) / (f2.powi(2) + f.powi(2))) * (-depth / 4.9).exp();
+        //Pure water contribution
+        let c = (0.0004937-(2.59 *  z.powf(-5.0)) * temp + 9.11 * z.powf(-7.0) * temp.powi(2) -1.5010 * z.powf(-8.0) * temp.powi(3)) * ((1.0-((3.38 * z.powf(-2.0)) * depth) + (4.9 * z.powf(-4.0) * depth.powi(2))))* f.powi(2);
+        //let c = 0.00049 * f.powi(2) * e.powf(-(temp / 27.0 + depth / 17.0));
+    
+        (a + b + c) / 1000.0 //dB/m
     }
 }
 
@@ -650,63 +708,5 @@ impl Grid {
         (x_positions, y_positions, intensities)
         // Return a tuple containing the vectors of x positions, y positions, intensities
     }
-}
-
-fn velocity_water(depth:f64) -> f64 {
-    let salinity: f64=22.0;
-    let latitude: f64=43.0;
-    let temp: f64 = temperature_at_depth(depth);
-
-    let speed: f64= 1402.5+5.0*temp-5.44e-2*temp*temp+2.1e-4*temp*temp+1.33*salinity-1.23e-2*salinity*temp+8.7e-5*salinity*temp*temp+1.56e-2*depth+2.55e-7*depth*depth-7.3e-12*depth*depth*depth+1.2e-6*depth*(latitude-45.0)-9.5e-13*temp*depth*depth*depth+3e-7*temp*temp*depth+1.43e-5*salinity*depth;
-speed
-}
-
-fn temperature_at_depth(depth: f64) -> f64 {
-    
-    let surface_temp: f64 = 20.0;  // degrees C
-    let bottom_temp:f64 = 4.0;  // degrees C
-    let thermocline_start:f64 = 200.0;  // metres //temp is constant from 0-200m
-    let thermocline_end:f64 = 1000.0;  // metres
-
-  //constant temperature up to 200m based on literature - thermocline start depth
-    if depth <= thermocline_start {
-        surface_temp
-    } else if depth >= thermocline_end {
-        bottom_temp
-    } else {
-        // Linear interpolation within the thermocline
-        let fraction = (depth - thermocline_start) / (thermocline_end - thermocline_start);
-        surface_temp + fraction * (bottom_temp - surface_temp)
-    }
-}
-
-
-// function to caculate absorption coefficient in seawater
-fn calculate_absorption(f: f64, temp: f64, salinity: f64, ddepth: f64, ) -> f64 {
-
-    let ph: f64  = 8.0;
-   
-    let z: f64 = 10.0; // just a constant
-
-    let depth = ddepth / 1000.0;
-
-
-    let f1 = 0.91 * (salinity / 35.0).sqrt() * (temp/33.0).exp();
-    let f2 = 46.0 * (temp/18.0).exp();
-
-    //Boric acid contribution
-    let a = 0.101 * ((f1 * f.powi(2)) / (f1.powi(2) + f.powi(2))) * ((ph - 8.0) / 0.57).exp();
-    //Magnesium Sulfate contribtion
-    let b = 0.56 * (1.0 + (temp / 76.0)) * (salinity / 35.0) * ((f2 * f.powi(2)) / (f2.powi(2) + f.powi(2))) * (-depth / 4.9).exp();
-    //Pure water contribution
-    let c = (0.0004937-(2.59 *  z.powf(-5.0)) * temp + 9.11 * z.powf(-7.0) * temp.powi(2) -1.5010 * z.powf(-8.0) * temp.powi(3)) * ((1.0-((3.38 * z.powf(-2.0)) * depth) + (4.9 * z.powf(-4.0) * depth.powi(2))))* f.powi(2);
-    //let c = 0.00049 * f.powi(2) * e.powf(-(temp / 27.0 + depth / 17.0));
-
-
-
-    (a + b + c) / 1000.0 //dB/m
-
-
-    
 }
 

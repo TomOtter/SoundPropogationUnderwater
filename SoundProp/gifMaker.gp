@@ -11,7 +11,7 @@ boundary = "./outputdata/boundary"
 
 set xrange [x_min:x_max]
 set yrange [y_min:y_max]
-# set cbrange [0:0.00004]
+# set cbrange [0:0.0000025]
 
 # Output to GIF file
 set output outfile
