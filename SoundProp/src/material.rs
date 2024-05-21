@@ -17,6 +17,9 @@ pub enum MaterialType {
     Sand,
 }
 
+// Add a function in rays for impedence that takes in type Option<Material>
+// If material is detected, run the material function, else run one using inputted density
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Material {
     material_name: MaterialType,
@@ -137,4 +140,5 @@ impl Material {
     pub fn acoustic_impedance(&self, speed_of_sound: f64) -> f64 {
         self.density.unwrap() * speed_of_sound
     }
+    
 }
