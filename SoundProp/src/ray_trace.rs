@@ -420,8 +420,15 @@ impl Rays {
                     _ => 0
                 };
 
-                if material_change_test == 1 { self.reflection(new_boundary.unwrap(), new_x_pos, new_y_pos, i); }
-                else if material_change_test == 2 { self.reflection(old_boundary.unwrap(), new_x_pos, new_y_pos, i) }
+                if material_change_test == 1 { 
+                    self.reflection(new_boundary.unwrap(), new_x_pos, new_y_pos,
+                     old_ray_speed, new_ray_speed, i); 
+                    let (r_coeff, t_coeff) = self.reflection_and_transmission(old_boundary.unwrap().material, new_boundary.unwrap().material.clone(),
+                     old_ray_speed, new_ray_speed, i);
+                } else if material_change_test == 2 { 
+                    self.reflection(old_boundary.unwrap(), new_x_pos, new_y_pos,
+                     old_ray_speed, new_ray_speed, i);
+                }
 
                 
                 if new_ray_speed > old_ray_speed {
@@ -513,7 +520,7 @@ impl Rays {
         }
     }
 
-    fn reflection<F: SingleInputFunction>(&mut self, mut boundary: Boundary<F>, new_x_pos: f64, new_y_pos: f64, ray_index: usize) -> () {
+    fn reflection<F: SingleInputFunction>(&mut self, mut boundary: Boundary<F>, new_x_pos: f64, new_y_pos: f64, old_speed: f64, new_speed: f64, ray_index: usize) -> () {
         let delta_x = new_x_pos - self.x_pos[ray_index];
         let delta_y = new_y_pos - self.y_pos[ray_index];
         let normal = -boundary.differentiate(new_x_pos).powi(-1);
@@ -535,6 +542,8 @@ impl Rays {
             reflected_angle = ( new_delta_x / new_delta_y ).atan();
             step_vector = self.step_vector[ray_index]
         }
+
+        // (r_coeff, t_coeff) = self.reflection_and_transmission(material_1, material_2, old_speed, new_speed, ray_index)
 
         self.create_rays(vec![reflected_angle], vec![self.x_pos[ray_index]], vec![self.y_pos[ray_index]],
              vec![self.intensity[ray_index]], vec![self.frequency[ray_index]], vec![step_vector]);
@@ -592,6 +601,16 @@ impl Rays {
         //let c = 0.00049 * f.powi(2) * e.powf(-(temp / 27.0 + depth / 17.0));
     
         (a + b + c) / 1000.0 //dB/m
+    }
+
+    fn reflection_and_transmission(&mut self, material_1: Material, material_2: Material, old_speed: f64, new_speed: f64, ray_index: usize) -> (f64, f64) {
+        let z1 = material_1.acoustic_impedance(old_speed);
+        let z2 = material_2.acoustic_impedance(new_speed);
+    
+        let r_coeff = ((z2 * (self.angle[ray_index]).cos())- (z1 * (self.angle[ray_index]).cos())) / ((z2 * (self.angle[ray_index]).cos())+ (z1*(self.angle[ray_index]).cos()));
+        let t_coeff = 1.0 - r_coeff;
+    
+        (r_coeff, t_coeff)
     }
 }
 
@@ -664,6 +683,7 @@ impl<F: SingleInputFunction> Boundary<F> {
         let h = 0.0000001;
         ( self.boundary_height( x_pos + h ).unwrap() - self.boundary_height( x_pos - h ).unwrap() ) / h
     } 
+ 
 }
 
 impl<F: SingleInputFunction + Clone> Clone for Boundary<F> {

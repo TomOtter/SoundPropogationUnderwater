@@ -133,4 +133,8 @@ impl Material {
             MaterialType::Sand => 1626.0,
         }
     }
+
+    pub fn acoustic_impedance(&self, speed_of_sound: f64) -> f64 {
+        self.density.unwrap() * speed_of_sound
+    }
 }
