@@ -1,4 +1,4 @@
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum MaterialType {
     // Stone
     Basalt,
@@ -17,7 +17,7 @@ pub enum MaterialType {
     Sand,
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Material {
     material_name: MaterialType,
     shear_modulus: Option<f64>,

@@ -73,6 +73,7 @@ impl<F: SingleInputFunction> Simulation<F> {
 
         let size: i32 = (duration / dt) as i32;
         let frame_spacing: i32 = size / frames;
+        let mut max_init_intensity = 0.0;
         let number_of_rays: usize = self.sources.iter().map(|source| source.number_of_rays as usize).sum();
         //Sums 'number_of_rays' across all sources.
 
@@ -81,14 +82,17 @@ impl<F: SingleInputFunction> Simulation<F> {
         
         for i in 0..self.sources.len() {
             self.sources[i].create_rays(&mut self.rays);
+            if self.sources[i].intensity / (self.sources[i].number_of_rays as f64).powi(2) > max_init_intensity {
+                max_init_intensity = self.sources[i].intensity / (self.sources[i].number_of_rays as f64).powi(2);
+            }
         } // Compiles all of the initial data for each ray, from its sources, into one 'Rays' struct.
 
-        self.rays.bound_angles();
+        self.rays.bound_angles([0,self.rays.x_pos.len()]);
 
         for i in 0..size {
             if i != 0{
                 self.grid.squares.clear();
-                self.rays.step(dt, &mut self.boundaries, self.grid.x_range, self.grid.y_range);  
+                self.rays.step(dt, &mut self.boundaries, self.grid.x_range, self.grid.y_range, max_init_intensity);  
             } // Done to ensure that the initial positions of the rays is not overwritten in the output file.
             if (i % frame_spacing) == 0 {
                 for j in 0..self.rays.x_pos.len() {
@@ -347,8 +351,8 @@ impl Rays {
         }
     } // Initialisation function to define the initial size of the fields in Rays.
     
-    fn bound_angles(&mut self) {
-        for i in 0..self.angle.len() {
+    fn bound_angles(&mut self, index_range: [usize;2]) {
+        for i in index_range[0]..index_range[1] {
 
             if self.angle[i] > PI/2.0 {
                 self.step_vector[i] = -1.0;
@@ -380,14 +384,15 @@ impl Rays {
             self.propagation_time.extend( vec![0.0;angle.len()] );
     } // Appends data of new rays to the vector fields under Rays.
 
-    fn step<F: SingleInputFunction>(&mut self, dt: f64, boundaries: &mut Vec<Boundary<F>>, simulation_x_limit: [f64;2], simulation_y_limit: [f64;2]) -> () {
+    fn step<F: SingleInputFunction>(&mut self, dt: f64, boundaries: &mut Vec<Boundary<F>>, simulation_x_limit: [f64;2], simulation_y_limit: [f64;2], init_max_intensity: f64) -> () {
         let mut new_x_pos: f64;
         let mut new_y_pos: f64;
         let mut i: usize = 0;
 
         while i != self.x_pos.len() {
             // Removes data if it leaves the simulation range
-            if (self.x_pos[i] < simulation_x_limit[0]) || (self.x_pos[i] > simulation_x_limit[1]) || (-self.y_pos[i] < simulation_y_limit[0])  || (-self.y_pos[i] > simulation_y_limit[1]) || (self.intensity[i].is_finite() == false) {
+            if (self.x_pos[i] < simulation_x_limit[0]) || (self.x_pos[i] > simulation_x_limit[1]) || (-self.y_pos[i] < simulation_y_limit[0]) ||
+                 (-self.y_pos[i] > simulation_y_limit[1]) || (self.intensity[i].is_finite() == false) || (self.intensity[i] < (0.001 * init_max_intensity) ){
                 self.angle.remove(i);
                 self.x_pos.remove(i);
                 self.y_pos.remove(i);
@@ -396,16 +401,28 @@ impl Rays {
                 self.frequency.remove(i);
                 self.propagation_time.remove(i);
             } else { 
-                let old_ray_speed = self.ray_speed(self.x_pos[i],self.y_pos[i], boundaries);
+                let (old_ray_speed, old_boundary) = self.ray_speed(self.x_pos[i],self.y_pos[i], boundaries);
 
                 // Caluclates the new position of each ray after 1 time step
                 self.propagation_time[i] += dt;
                 new_x_pos = self.x_pos[i] + self.step_vector[i] * dt * old_ray_speed * self.angle[i].sin();
                 new_y_pos = self.y_pos[i] + self.step_vector[i] * dt * old_ray_speed * self.angle[i].cos();
 
-                let new_ray_speed = self.ray_speed(new_x_pos, new_y_pos, boundaries);
+                let (new_ray_speed, new_boundary) = self.ray_speed(new_x_pos, new_y_pos, boundaries);
 
-                // Implement some if statement around here for reflection with boundary.
+                let material_change_test = match (&old_boundary, &new_boundary) {
+                    (Some(location_1), Some(location_2)) => {
+                        if location_1.material != location_2.material { 1 }
+                        else { 0 }
+                    }
+                    (Some(_), None) => 2,
+                    (None, Some(_)) => 1,
+                    _ => 0
+                };
+
+                if material_change_test == 1 { self.reflection(new_boundary.unwrap(), new_x_pos, new_y_pos, i); }
+                else if material_change_test == 2 { self.reflection(old_boundary.unwrap(), new_x_pos, new_y_pos, i) }
+
                 
                 if new_ray_speed > old_ray_speed {
                     let critical_angle : f64 = (old_ray_speed/new_ray_speed).asin();
@@ -432,7 +449,7 @@ impl Rays {
         2.0 * PI * self.frequency[index] * self.propagation_time[index]
     }
 
-    fn ray_speed<F: SingleInputFunction>(&mut self, x_pos: f64, y_pos: f64, boundaries: &mut Vec<Boundary<F>>) -> f64 {
+    fn ray_speed<F: SingleInputFunction>(&mut self, x_pos: f64, y_pos: f64, boundaries: &mut Vec<Boundary<F>>) -> (f64, Option<Boundary<F>>) {
         let mut current_boundary: Option<usize> = None;
         let mut boundary_height: Option<f64> = None;
         let velocity_air: f64 = 343.0; // m s^-1
@@ -489,10 +506,40 @@ impl Rays {
         }
 
         match ycase{
-            1=>self.velocity_water(-y_pos),
-            2=>velocity_air,
-            _=>valid_boundaries[current_boundary.unwrap()].material.calculate_velocity(-y_pos - boundary_height.unwrap()),
+            1=>(self.velocity_water(-y_pos), None),
+            2=>(velocity_air, None),
+            _=>(valid_boundaries[current_boundary.unwrap()].material.calculate_velocity(-y_pos - boundary_height.unwrap()), 
+                Some( valid_boundaries[current_boundary.unwrap()].clone() )),
         }
+    }
+
+    fn reflection<F: SingleInputFunction>(&mut self, mut boundary: Boundary<F>, new_x_pos: f64, new_y_pos: f64, ray_index: usize) -> () {
+        let delta_x = new_x_pos - self.x_pos[ray_index];
+        let delta_y = new_y_pos - self.y_pos[ray_index];
+        let normal = -boundary.differentiate(new_x_pos).powi(-1);
+        let reflected_angle: f64;
+        let step_vector: f64;
+
+        if normal.is_infinite() { 
+            reflected_angle = self.angle[ray_index];
+            step_vector = - self.step_vector[ray_index]
+        } else if normal.is_nan() {
+            reflected_angle = - self.angle[ray_index];
+            step_vector = self.step_vector[ray_index]
+        } else {
+            let dot_product = delta_x + delta_y * normal;
+
+            let new_delta_x = delta_x - 2.0 * dot_product;
+            let new_delta_y = delta_y - 2.0 * dot_product * normal;
+
+            reflected_angle = ( new_delta_x / new_delta_y ).atan();
+            step_vector = self.step_vector[ray_index]
+        }
+
+        self.create_rays(vec![reflected_angle], vec![self.x_pos[ray_index]], vec![self.y_pos[ray_index]],
+             vec![self.intensity[ray_index]], vec![self.frequency[ray_index]], vec![step_vector]);
+
+        self.bound_angles([self.x_pos.len(), self.x_pos.len()]);
     }
 
     fn velocity_water(&mut self, depth:f64) -> f64 {
@@ -612,6 +659,11 @@ impl<F: SingleInputFunction> Boundary<F> {
 
         Some(y_boundary)
     }
+
+    pub fn differentiate(&mut self, x_pos: f64) -> f64 {
+        let h = 0.0000001;
+        ( self.boundary_height( x_pos + h ).unwrap() - self.boundary_height( x_pos - h ).unwrap() ) / h
+    } 
 }
 
 impl<F: SingleInputFunction + Clone> Clone for Boundary<F> {
