@@ -25,9 +25,9 @@ fn main() -> std::io::Result<()> {
 
     sound_prop.add_boundary(TurbiditeArea, boundary2);
 
-    sound_prop.add_source(-PI, PI, 1000, 2.0,
+    sound_prop.add_source(-PI, PI, 2000, 2.0,
         10.0, [-500.0, -500.0], Point);
-    sound_prop.add_source(-PI, PI, 1000, 2.0,
+    sound_prop.add_source(-PI, PI, 2000, 2.0,
         10.0, [500.0, -500.0], Point);
 
    sound_prop.generate_gif(5.0, 0.005, 500);

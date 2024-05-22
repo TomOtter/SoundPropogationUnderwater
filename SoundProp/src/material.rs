@@ -17,6 +17,9 @@ pub enum MaterialType {
     Sand,
 }
 
+// Add a function in rays for impedence that takes in type Option<Material>
+// If material is detected, run the material function, else run one using inputted density
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Material {
     material_name: MaterialType,
