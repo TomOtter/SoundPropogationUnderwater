@@ -392,7 +392,7 @@ impl Rays {
         while i != self.x_pos.len() {
             // Removes data if it leaves the simulation range
             if (self.x_pos[i] < simulation_x_limit[0]) || (self.x_pos[i] > simulation_x_limit[1]) || (-self.y_pos[i] < simulation_y_limit[0]) ||
-                 (-self.y_pos[i] > simulation_y_limit[1]) || (self.intensity[i].is_finite() == false) || (self.intensity[i] < (0.001 * init_max_intensity) ){
+                 (-self.y_pos[i] > simulation_y_limit[1]) || (self.intensity[i].is_finite() == false) || (self.intensity[i] < init_max_intensity / 1000.0) {
                 self.angle.remove(i);
                 self.x_pos.remove(i);
                 self.y_pos.remove(i);
@@ -420,14 +420,22 @@ impl Rays {
                     _ => 0
                 };
 
-                if material_change_test == 1 { 
-                    self.reflection(new_boundary.unwrap(), new_x_pos, new_y_pos,
-                     old_ray_speed, new_ray_speed, i); 
-                    let (r_coeff, t_coeff) = self.reflection_and_transmission(old_boundary.unwrap().material, new_boundary.unwrap().material.clone(),
-                     old_ray_speed, new_ray_speed, i);
-                } else if material_change_test == 2 { 
-                    self.reflection(old_boundary.unwrap(), new_x_pos, new_y_pos,
-                     old_ray_speed, new_ray_speed, i);
+                if material_change_test != 0 {
+                    let r_coeff: f64;
+                    let t_coeff: f64;
+                    if material_change_test == 1 { 
+                        self.reflection(new_boundary.clone().unwrap(), new_x_pos, new_y_pos,
+                        old_ray_speed, new_ray_speed, i); 
+                        (r_coeff, t_coeff) = self.reflection_and_transmission(old_boundary, new_boundary,
+                        old_ray_speed, new_ray_speed, i);
+                    } else { 
+                        self.reflection(old_boundary.clone().unwrap(), new_x_pos, new_y_pos,
+                        old_ray_speed, new_ray_speed, i);
+                        (r_coeff, t_coeff) = self.reflection_and_transmission(old_boundary, new_boundary,
+                        old_ray_speed, new_ray_speed, i);
+                    }
+                    *self.intensity.last_mut().unwrap() *= r_coeff;
+                    self.intensity[i] *= t_coeff;
                 }
 
                 
@@ -551,6 +559,44 @@ impl Rays {
         self.bound_angles([self.x_pos.len(), self.x_pos.len()]);
     }
 
+    fn reflection_and_transmission<F: SingleInputFunction>(&mut self, material_1: Option<Boundary<F>>, material_2: Option<Boundary<F>>, old_speed: f64, new_speed: f64, ray_index: usize) -> (f64, f64) {
+        let z1: f64;
+        let z2: f64;
+        // if let Some(boundary_1) = material_1 { 
+        //     z1 = self.acoustic_impedance(ImpedenceInput::Material(boundary_1.material),old_speed, boundary_1.boundary_height(self.x_pos[ray_index]), ray_index);
+        // }
+        // else {
+        //     let density: f64;
+        //     if self.y_pos[ray_index] > 0.0 { density = 1.293 }
+        //     else { density = self.density_water(ray_index) }
+        //     z1 = self.acoustic_impedance(ImpedenceInput::Density(density), old_speed, None, ray_index);
+        // }
+        z1 = 1900.0;
+        if let Some(boundary_2) = material_2 { 
+            z2 = self.acoustic_impedance(ImpedenceInput::Material(boundary_2.material),new_speed, boundary_2.boundary_height(self.x_pos[ray_index]), ray_index); 
+        }
+        else {
+            let density: f64;
+            if self.y_pos[ray_index] > 0.0 { density = 1.293 }
+            else { density = self.density_water(ray_index) }
+            z2 = self.acoustic_impedance(ImpedenceInput::Density(density), new_speed, None, ray_index);
+        }
+    
+        let r_coeff = ((z2 * (self.angle[ray_index]).cos()) - (z1 * (self.angle[ray_index]).cos())) / ((z2 * (self.angle[ray_index]).cos()) + (z1*(self.angle[ray_index]).cos()));
+        let t_coeff = 1.0 - r_coeff;
+    
+        (r_coeff, t_coeff)
+    }
+
+    fn acoustic_impedance(&mut self, input: ImpedenceInput, speed_of_sound: f64, boundary_height: Option<f64>, ray_index: usize) -> f64 {
+        match input {
+            ImpedenceInput::Material(material) => material.clone().acoustic_impedance(speed_of_sound, self.y_pos[ray_index], boundary_height.unwrap()),
+            ImpedenceInput::Density(density) => density * speed_of_sound
+        }
+    }
+
+    //                                                  MARK: Water Properties
+
     fn velocity_water(&mut self, depth:f64) -> f64 {
         let salinity: f64=22.0;
         let latitude: f64=43.0;
@@ -558,6 +604,11 @@ impl Rays {
     
         let speed: f64= 1402.5+5.0*temp-5.44e-2*temp.powi(2)+2.1e-4*temp.powi(2)+1.33*salinity-1.23e-2*salinity*temp+8.7e-5*salinity*temp.powi(2)+1.56e-2*depth+2.55e-7*depth.powi(2)-7.3e-12*depth.powi(3)+1.2e-6*depth*(latitude-45.0)-9.5e-13*temp*depth.powi(3)+3e-7*temp.powi(2)*depth+1.43e-5*salinity*depth;
         speed
+    }
+
+    fn density_water(&mut self, ray_index: usize) -> f64 {
+        let temperature = self.temperature_at_depth(self.y_pos[ray_index]);
+        999.974950 * (1.0 - (temperature - 3.983035).powi(2) * (temperature + 301.797) / (522528.9) * (temperature + 69.34881) )
     }
 
     fn temperature_at_depth(&mut self, depth: f64) -> f64 {
@@ -602,16 +653,11 @@ impl Rays {
     
         (a + b + c) / 1000.0 //dB/m
     }
+}
 
-    fn reflection_and_transmission(&mut self, material_1: Material, material_2: Material, old_speed: f64, new_speed: f64, ray_index: usize) -> (f64, f64) {
-        let z1 = material_1.acoustic_impedance(old_speed);
-        let z2 = material_2.acoustic_impedance(new_speed);
-    
-        let r_coeff = ((z2 * (self.angle[ray_index]).cos())- (z1 * (self.angle[ray_index]).cos())) / ((z2 * (self.angle[ray_index]).cos())+ (z1*(self.angle[ray_index]).cos()));
-        let t_coeff = 1.0 - r_coeff;
-    
-        (r_coeff, t_coeff)
-    }
+enum ImpedenceInput {
+    Material(Material),
+    Density(f64),
 }
 
 //                                                  MARK: Boundary Struct
