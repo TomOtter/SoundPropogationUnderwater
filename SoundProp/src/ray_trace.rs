@@ -62,7 +62,7 @@ impl<F: SingleInputFunction> Simulation<F> {
         }
     }
 
-    fn calculate(&mut self, dt: f64, duration: f64, frames: i32) -> () {
+    fn calculate(&mut self, dt: f64, duration: f64, frames: i32) -> f64 {
         if self.sources.len() == 0 {
             eprintln!("Error: No sources have been defined. Call 'self.addSource' prior to this function to define a soundwave source.");
             std::process::exit(1);
@@ -105,6 +105,8 @@ impl<F: SingleInputFunction> Simulation<F> {
                 // Outputs the intensitys at each grid square to a file
             }
         } // Time loop which pushes each ray by one step and outputs the new positions each iteration.
+
+        max_init_intensity
     }
 
 //                                                    MARK: Outputs
@@ -174,7 +176,7 @@ impl<F: SingleInputFunction> Simulation<F> {
             std::process::exit(1);
         } // Terminates the program if the number of frames requested is greater than the maximum possible number of files produced
 
-        self.calculate(dt, duration, frames);
+        let max_intensity = self.calculate(dt, duration, frames);
         let txt_files = match fs::read_dir("outputdata") {
             Ok(entries) => {
                 entries.filter_map(|entry| {
@@ -237,8 +239,8 @@ impl<F: SingleInputFunction> Simulation<F> {
         self.create_folder("./outputImages");
 
         let length = txt_files.len();
-        let cmd = format!("runGifMAker.bat {} {} {} {} {} {} {}",
-         length, self.boundaries.len(), self.grid.x_range[0], self.grid.x_range[1], self.grid.y_range[0], self.grid.y_range[1], duration);
+        let cmd = format!("runGifMAker.bat {} {} {} {} {} {} {} {}",
+         length, self.boundaries.len(), self.grid.x_range[0], self.grid.x_range[1], self.grid.y_range[0], self.grid.y_range[1], duration, max_intensity);
 
         if cfg!(target_os = "windows") {
             Command::new("cmd")
@@ -392,7 +394,7 @@ impl Rays {
         while i != self.x_pos.len() {
             // Removes data if it leaves the simulation range
             if (self.x_pos[i] < simulation_x_limit[0]) || (self.x_pos[i] > simulation_x_limit[1]) || (-self.y_pos[i] < simulation_y_limit[0]) ||
-                 (-self.y_pos[i] > simulation_y_limit[1]) || (self.intensity[i].is_finite() == false) || (self.intensity[i] < init_max_intensity / 1000.0) {
+                 (-self.y_pos[i] > simulation_y_limit[1]) || (self.intensity[i].is_finite() == false) || (self.intensity[i] < init_max_intensity / 10000000000.0) {
                 self.angle.remove(i);
                 self.x_pos.remove(i);
                 self.y_pos.remove(i);
@@ -424,13 +426,11 @@ impl Rays {
                     let r_coeff: f64;
                     let t_coeff: f64;
                     if material_change_test == 1 { 
-                        self.reflection(new_boundary.clone().unwrap(), new_x_pos, new_y_pos,
-                        old_ray_speed, new_ray_speed, i); 
+                        self.reflection(new_boundary.clone().unwrap(), new_x_pos, new_y_pos, i); 
                         (r_coeff, t_coeff) = self.reflection_and_transmission(old_boundary, new_boundary,
                         old_ray_speed, new_ray_speed, i);
                     } else { 
-                        self.reflection(old_boundary.clone().unwrap(), new_x_pos, new_y_pos,
-                        old_ray_speed, new_ray_speed, i);
+                        self.reflection(old_boundary.clone().unwrap(), new_x_pos, new_y_pos, i);
                         (r_coeff, t_coeff) = self.reflection_and_transmission(old_boundary, new_boundary,
                         old_ray_speed, new_ray_speed, i);
                     }
@@ -528,19 +528,22 @@ impl Rays {
         }
     }
 
-    fn reflection<F: SingleInputFunction>(&mut self, mut boundary: Boundary<F>, new_x_pos: f64, new_y_pos: f64, old_speed: f64, new_speed: f64, ray_index: usize) -> () {
+    fn reflection<F: SingleInputFunction>(&mut self, mut boundary: Boundary<F>, new_x_pos: f64, new_y_pos: f64, ray_index: usize) -> () {
         let delta_x = new_x_pos - self.x_pos[ray_index];
         let delta_y = new_y_pos - self.y_pos[ray_index];
-        let normal = -boundary.differentiate(new_x_pos).powi(-1);
+        let slope = boundary.differentiate(new_x_pos);
+        let normal = -slope.powi(-1);
         let reflected_angle: f64;
         let step_vector: f64;
 
+        const TOLERANCE: f64 = 0.75;
+
         if normal.is_infinite() { 
-            reflected_angle = self.angle[ray_index];
+            reflected_angle = - self.angle[ray_index];
             step_vector = - self.step_vector[ray_index]
         } else if normal.is_nan() {
-            reflected_angle = - self.angle[ray_index];
-            step_vector = self.step_vector[ray_index]
+            reflected_angle = self.angle[ray_index];
+            step_vector = - self.step_vector[ray_index]
         } else {
             let dot_product = delta_x + delta_y * normal;
 
@@ -551,27 +554,26 @@ impl Rays {
             step_vector = self.step_vector[ray_index]
         }
 
-        // (r_coeff, t_coeff) = self.reflection_and_transmission(material_1, material_2, old_speed, new_speed, ray_index)
+        if (reflected_angle - slope.atan()).abs() > TOLERANCE {
+            self.create_rays(vec![reflected_angle], vec![self.x_pos[ray_index]], vec![self.y_pos[ray_index]],
+                vec![self.intensity[ray_index]], vec![self.frequency[ray_index]], vec![step_vector]);
 
-        self.create_rays(vec![reflected_angle], vec![self.x_pos[ray_index]], vec![self.y_pos[ray_index]],
-             vec![self.intensity[ray_index]], vec![self.frequency[ray_index]], vec![step_vector]);
-
-        self.bound_angles([self.x_pos.len(), self.x_pos.len()]);
+            self.bound_angles([self.x_pos.len(), self.x_pos.len()]);
+        }
     }
 
     fn reflection_and_transmission<F: SingleInputFunction>(&mut self, material_1: Option<Boundary<F>>, material_2: Option<Boundary<F>>, old_speed: f64, new_speed: f64, ray_index: usize) -> (f64, f64) {
         let z1: f64;
         let z2: f64;
-        // if let Some(boundary_1) = material_1 { 
-        //     z1 = self.acoustic_impedance(ImpedenceInput::Material(boundary_1.material),old_speed, boundary_1.boundary_height(self.x_pos[ray_index]), ray_index);
-        // }
-        // else {
-        //     let density: f64;
-        //     if self.y_pos[ray_index] > 0.0 { density = 1.293 }
-        //     else { density = self.density_water(ray_index) }
-        //     z1 = self.acoustic_impedance(ImpedenceInput::Density(density), old_speed, None, ray_index);
-        // }
-        z1 = 1900.0;
+        if let Some(boundary_1) = material_1 { 
+            z1 = self.acoustic_impedance(ImpedenceInput::Material(boundary_1.material),old_speed, boundary_1.boundary_height(self.x_pos[ray_index]), ray_index);
+        }
+        else {
+            let density: f64;
+            if self.y_pos[ray_index] > 0.0 { density = 1.293 }
+            else { density = self.density_water(ray_index) }
+            z1 = self.acoustic_impedance(ImpedenceInput::Density(density), old_speed, None, ray_index);
+        }
         if let Some(boundary_2) = material_2 { 
             z2 = self.acoustic_impedance(ImpedenceInput::Material(boundary_2.material),new_speed, boundary_2.boundary_height(self.x_pos[ray_index]), ray_index); 
         }
@@ -727,7 +729,17 @@ impl<F: SingleInputFunction> Boundary<F> {
 
     pub fn differentiate(&mut self, x_pos: f64) -> f64 {
         let h = 0.0000001;
-        ( self.boundary_height( x_pos + h ).unwrap() - self.boundary_height( x_pos - h ).unwrap() ) / h
+        let mut result: f64 = f64::NAN;
+        if let Some(next_height) = self.boundary_height( x_pos + h / 2.0 ) {
+            if let Some(prior_height) = self.boundary_height( x_pos - h / 2.0 ) {
+                result = (next_height - prior_height) / h;
+            } else {
+                result = (next_height - self.boundary_height(x_pos).unwrap()) / h;
+            }
+        } else if let Some(prior_height) = self.boundary_height( x_pos - h / 2.0 ) {
+            result = (self.boundary_height(x_pos).unwrap() - prior_height) / h;
+        }
+        result
     } 
  
 }

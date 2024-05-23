@@ -25,12 +25,12 @@ fn main() -> std::io::Result<()> {
 
     sound_prop.add_boundary(TurbiditeArea, boundary2);
 
+    sound_prop.add_source(-PI, PI, 2000, 4.0,
+        10.0, [-500.0, -100.0], Point);
     sound_prop.add_source(-PI, PI, 2000, 2.0,
-        10.0, [-500.0, -500.0], Point);
-    sound_prop.add_source(-PI, PI, 2000, 2.0,
-        10.0, [500.0, -500.0], Point);
+        10.0, [500.0, -100.0], Point);
 
-   sound_prop.generate_gif(5.0, 0.005, 500);
+   sound_prop.generate_gif(5.0, 0.005, 250);
 
    let elapsed = now.elapsed();
     println!("Elapsed: {:.2?}", elapsed);
