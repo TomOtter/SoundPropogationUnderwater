@@ -106,9 +106,25 @@ my_simulation.add_source(
 - **location:** An array of 2 float variables, whos magnitudes represent the x and y positions of the centre of the source respectively.
 - **source_type:** An enumeration of all the source types our simulation can create. Currently we only produce a 'Point' source (where all sound waves will propagate from a single point) however it is setup this way to allow for more source types to easily be introduced to the code.
 
-<h3> Running the simulation and producing a GIF </h3>
+<h3> Running the simulation and Outputting the Result </h3>
 
-Currently, there is no option to conduct the simualtion without producing a GIF alongside the output data files. To create a GIF, you must call the Simulation::generate_gif function. Besides the variable holding all simulation data, the function takes 3 inputs: duration, dt and frames.
+There are two options you have when outputting the results of our simulation. Both involve outputting data files, containing each rays position and intensities, at different time steps however you can also output a gif in addition to this.
+
+To output only raw data files, you can call the Simulation::generate_data_files function. Besides the variable holding all simulation data, the function takes 3 inputs: duration, dt and number_of_files.
+
+```rust
+my_simulation.generate_data_files(
+    duration,       // f64
+    dt,             // f64
+    number_of_files // i32
+);
+```
+
+- **duration:** A positive, non-zero, variable that represents the total simulation time
+- **dt:** A positive, non-zero, variable that represents the time increment. This should not be greater than duration.
+- **number_of_files:** A positive, non-zero, integer that determines how many data files are outputted. This should not be greater than duration / dt.
+
+To also create a GIF, you must call the Simulation::generate_gif function. Besides the variable holding all simulation data, the function takes 3 inputs: duration, dt and frames.
 
 ```rust
 my_simulation.generate_gif(
@@ -151,12 +167,12 @@ fn main() -> std::io::Result<()> {
 
     sound_prop.add_boundary(TurbiditeArea, boundary2);
 
-    sound_prop.add_source(-PI, PI, 1000, 2.0,
-        10.0, [-500.0, -500.0], Point);
-    sound_prop.add_source(-PI, PI, 1000, 2.0,
-        10.0, [500.0, -500.0], Point);
+    sound_prop.add_source(-PI, PI, 2000, 4.0,
+        10.0, [-500.0, -100.0], Point);
+    sound_prop.add_source(-PI, PI, 2000, 2.0,
+        10.0, [500.0, -100.0], Point);
 
-   sound_prop.generate_gif(4.0, 0.005, 100);
+   sound_prop.generate_gif(5.0, 0.005, 500);
 
    let elapsed = now.elapsed();
     println!("Elapsed: {:.2?}", elapsed);

@@ -62,7 +62,7 @@ impl<F: SingleInputFunction> Simulation<F> {
         }
     }
 
-    fn calculate(&mut self, dt: f64, duration: f64, frames: i32) -> f64 {
+    pub fn generate_data_files(&mut self, duration: f64, dt: f64, number_of_files: i32) -> f64 {
         if self.sources.len() == 0 {
             eprintln!("Error: No sources have been defined. Call 'self.addSource' prior to this function to define a soundwave source.");
             std::process::exit(1);
@@ -72,7 +72,7 @@ impl<F: SingleInputFunction> Simulation<F> {
         // Creates folder for data files to be stored
 
         let size: i32 = (duration / dt) as i32;
-        let frame_spacing: i32 = size / frames;
+        let frame_spacing: i32 = size / number_of_files;
         let mut max_init_intensity = 0.0;
         let number_of_rays: usize = self.sources.iter().map(|source| source.number_of_rays as usize).sum();
         //Sums 'number_of_rays' across all sources.
@@ -176,7 +176,7 @@ impl<F: SingleInputFunction> Simulation<F> {
             std::process::exit(1);
         } // Terminates the program if the number of frames requested is greater than the maximum possible number of files produced
 
-        let max_intensity = self.calculate(dt, duration, frames);
+        let max_intensity = self.generate_data_files(duration, dt, frames);
         let txt_files = match fs::read_dir("outputdata") {
             Ok(entries) => {
                 entries.filter_map(|entry| {
@@ -543,7 +543,7 @@ impl Rays {
             step_vector = - self.step_vector[ray_index]
         } else if normal.is_nan() {
             reflected_angle = self.angle[ray_index];
-            step_vector = - self.step_vector[ray_index]
+            step_vector = -1.0 * self.step_vector[ray_index]
         } else {
             let dot_product = delta_x + delta_y * normal;
 
