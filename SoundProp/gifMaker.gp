@@ -15,12 +15,15 @@ boundary = "./outputdata/boundary"
 
 set xrange [x_min:x_max]
 set yrange [y_min:y_max]
-set cbrange [max_intensity/10000000000.0:max_intensity]
+set cbrange [0:max_intensity/10000]
 set cbtics format "%.1e"
 set cblabel "Intensity (W/m^2)" rotate by -90 offset 2,0
 
+
 # Output to GIF file
 set output outfile
+set palette color positive
+set pm3d map
 
 do for [i = 0:frames-1] {
     current_time = i * duration / (frames * 1.0)

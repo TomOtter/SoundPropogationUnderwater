@@ -8,6 +8,14 @@ pub enum SourceType {
     Line,
 }
 
+
+pub fn derivative(f: fn(f64)->f64 , x: f64) -> f64{
+    let h: f64 = 0.0000001;
+    
+    (f(x + h) - f(x)) / h 
+}
+
+
 //                                               MARK: Simulation Struct
 pub struct Simulation<F: SingleInputFunction> {
     sources : Vec<Source>,
@@ -318,7 +326,8 @@ impl Source {
                     vec![-1.0 * self.location[1];self.number_of_rays],
                     vec![local_ray_intensity;self.number_of_rays],
                     vec![self.frequency;self.number_of_rays],
-                    vec![1.0;self.number_of_rays])
+                    vec![1.0;self.number_of_rays],
+                    vec![0.0 ; self.number_of_rays])
             }
             SourceType::Line => {
                 println!("Not yet implemented");
@@ -334,10 +343,12 @@ pub struct Rays {
     angle: Vec<f64>,
     x_pos: Vec<f64>,
     y_pos: Vec<f64>,
+    initial_intensity: Vec<f64>,
     intensity: Vec<f64>,
     step_vector: Vec<f64>,
     frequency: Vec<f64>,
-    propagation_time: Vec<f64>
+    propagation_time: Vec<f64>,
+    total_distance: Vec<f64>,
 } // Defines the properties of each ray.
 
 impl Rays {
@@ -346,10 +357,12 @@ impl Rays {
             angle: Vec::with_capacity(number_of_rays as usize),
             x_pos: Vec::with_capacity(number_of_rays as usize),
             y_pos: Vec::with_capacity(number_of_rays as usize),
+            initial_intensity: Vec::with_capacity(number_of_rays as usize),
             intensity: Vec::with_capacity(number_of_rays as usize),
             frequency: Vec::with_capacity(number_of_rays as usize),
             step_vector: Vec::with_capacity(number_of_rays as usize),
             propagation_time: Vec::with_capacity(number_of_rays as usize),
+            total_distance: Vec::with_capacity(number_of_rays as usize),
         }
     } // Initialisation function to define the initial size of the fields in Rays.
     
@@ -376,14 +389,16 @@ impl Rays {
     } // Bounds the initial angle of the ray between +/- pi/2 rads (for maths purposes). Also converts the step to show downwards (-) or upwards (+) motion.
 
     fn create_rays(&mut self, angle: Vec<f64>, x_pos: Vec<f64>, y_pos: Vec<f64>,
-         intensity: Vec<f64>, frequency: Vec<f64>, step_vector: Vec<f64>) -> () {
+         intensity: Vec<f64>, frequency: Vec<f64>, step_vector: Vec<f64> , total_distance: Vec<f64>) -> () {
             self.angle.extend(&angle);
             self.x_pos.extend(x_pos);
             self.y_pos.extend(y_pos);
+            self.initial_intensity.extend(intensity.clone());
             self.intensity.extend(intensity);
             self.frequency.extend(frequency);
             self.step_vector.extend(step_vector);
             self.propagation_time.extend( vec![0.0;angle.len()] );
+            self.total_distance.extend(total_distance);
     } // Appends data of new rays to the vector fields under Rays.
 
     fn step<F: SingleInputFunction>(&mut self, dt: f64, boundaries: &mut Vec<Boundary<F>>, simulation_x_limit: [f64;2], simulation_y_limit: [f64;2], init_max_intensity: f64) -> () {
@@ -398,10 +413,12 @@ impl Rays {
                 self.angle.remove(i);
                 self.x_pos.remove(i);
                 self.y_pos.remove(i);
+                self.initial_intensity.remove(i);
                 self.intensity.remove(i);
                 self.step_vector.remove(i);
                 self.frequency.remove(i);
                 self.propagation_time.remove(i);
+                self.total_distance.remove(i);
             } else { 
                 let (old_ray_speed, old_boundary) = self.ray_speed(self.x_pos[i],self.y_pos[i], boundaries);
 
@@ -448,13 +465,26 @@ impl Rays {
                     }
                 }
 
+
+                let preangle = new_ray_speed / old_ray_speed * self.angle[i].sin();
+
+
+                let distance_travelled = ((new_x_pos*new_x_pos + new_y_pos*new_y_pos).sqrt() - (self.x_pos[i]*self.x_pos[i] + self.y_pos[i]*self.y_pos[i]).sqrt()).abs();
+                self.total_distance[i] += distance_travelled;
+
+
+
                 self.x_pos[i] = new_x_pos;
                 self.y_pos[i] = new_y_pos;
                 self.angle[i] = ( new_ray_speed / old_ray_speed * self.angle[i].sin() ).asin();
 
                 let salinity = 35.0;
+
                 let temperature = self.temperature_at_depth(self.y_pos[i]);
-                self.intensity[i] *= 1.0 - self.calculate_absorption(self.frequency[i], temperature, salinity, self.y_pos[i]);
+                //self.intensity[i] *= 1.0 - self.calculate_absorption(self.frequency[i], temperature, salinity, self.y_pos[i]);
+
+                self.intensity[i] = (1.0 - self.calculate_absorption(self.frequency[i], temperature, salinity, self.y_pos[i])) * self.initial_intensity[i] * (1.0/(PI * 2.0 * self.total_distance[i]));
+
                 i += 1;
             }
         }
@@ -556,7 +586,7 @@ impl Rays {
 
         if (reflected_angle - slope.atan()).abs() > TOLERANCE {
             self.create_rays(vec![reflected_angle], vec![self.x_pos[ray_index]], vec![self.y_pos[ray_index]],
-                vec![self.intensity[ray_index]], vec![self.frequency[ray_index]], vec![step_vector]);
+                vec![self.intensity[ray_index]], vec![self.frequency[ray_index]], vec![step_vector],vec![self.total_distance[ray_index]]);
 
             self.bound_angles([self.x_pos.len(), self.x_pos.len()]);
         }
