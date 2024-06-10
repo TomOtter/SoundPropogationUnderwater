@@ -174,4 +174,4 @@ The simulation is contained between &plusmn; 1500.0 in the x-axis and between 10
 
 <h3> Output</h3>
 
-![Visualization of code](simulationFixedScale.gif)
+![Visualization of code](/SoundProp/outputImages/imageGif.gif)
