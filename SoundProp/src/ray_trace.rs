@@ -8,6 +8,14 @@ pub enum SourceType {
     Line,
 }
 
+
+pub fn derivative(f: fn(f64)->f64 , x: f64) -> f64{
+    let h: f64 = 0.0000001;
+    
+    (f(x + h) - f(x)) / h 
+}
+
+
 //                                               MARK: Simulation Struct
 pub struct Simulation<F: SingleInputFunction> {
     sources : Vec<Source>,
@@ -62,7 +70,7 @@ impl<F: SingleInputFunction> Simulation<F> {
         }
     }
 
-    fn calculate(&mut self, dt: f64, duration: f64, frames: i32) -> () {
+    pub fn generate_data_files(&mut self, duration: f64, dt: f64, number_of_files: i32) -> f64 {
         if self.sources.len() == 0 {
             eprintln!("Error: No sources have been defined. Call 'self.addSource' prior to this function to define a soundwave source.");
             std::process::exit(1);
@@ -72,7 +80,8 @@ impl<F: SingleInputFunction> Simulation<F> {
         // Creates folder for data files to be stored
 
         let size: i32 = (duration / dt) as i32;
-        let frame_spacing: i32 = size / frames;
+        let frame_spacing: i32 = size / number_of_files;
+        let mut max_init_intensity = 0.0;
         let number_of_rays: usize = self.sources.iter().map(|source| source.number_of_rays as usize).sum();
         //Sums 'number_of_rays' across all sources.
 
@@ -81,14 +90,17 @@ impl<F: SingleInputFunction> Simulation<F> {
         
         for i in 0..self.sources.len() {
             self.sources[i].create_rays(&mut self.rays);
+            if self.sources[i].intensity / (self.sources[i].number_of_rays as f64).powi(2) > max_init_intensity {
+                max_init_intensity = self.sources[i].intensity / (self.sources[i].number_of_rays as f64).powi(2);
+            }
         } // Compiles all of the initial data for each ray, from its sources, into one 'Rays' struct.
 
-        self.rays.bound_angles();
+        self.rays.bound_angles([0,self.rays.x_pos.len()]);
 
         for i in 0..size {
             if i != 0{
                 self.grid.squares.clear();
-                self.rays.step(dt, &mut self.boundaries, self.grid.x_range, self.grid.y_range);  
+                self.rays.step(dt, &mut self.boundaries, self.grid.x_range, self.grid.y_range, max_init_intensity);  
             } // Done to ensure that the initial positions of the rays is not overwritten in the output file.
             if (i % frame_spacing) == 0 {
                 for j in 0..self.rays.x_pos.len() {
@@ -101,6 +113,8 @@ impl<F: SingleInputFunction> Simulation<F> {
                 // Outputs the intensitys at each grid square to a file
             }
         } // Time loop which pushes each ray by one step and outputs the new positions each iteration.
+
+        max_init_intensity
     }
 
 //                                                    MARK: Outputs
@@ -170,7 +184,7 @@ impl<F: SingleInputFunction> Simulation<F> {
             std::process::exit(1);
         } // Terminates the program if the number of frames requested is greater than the maximum possible number of files produced
 
-        self.calculate(dt, duration, frames);
+        let max_intensity = self.generate_data_files(duration, dt, frames);
         let txt_files = match fs::read_dir("outputdata") {
             Ok(entries) => {
                 entries.filter_map(|entry| {
@@ -233,8 +247,8 @@ impl<F: SingleInputFunction> Simulation<F> {
         self.create_folder("./outputImages");
 
         let length = txt_files.len();
-        let cmd = format!("runGifMAker.bat {} {} {} {} {} {}",
-         length, self.boundaries.len(), self.grid.x_range[0], self.grid.x_range[1], self.grid.y_range[0], self.grid.y_range[1]);
+        let cmd = format!("runGifMAker.bat {} {} {} {} {} {} {} {}",
+         length, self.boundaries.len(), self.grid.x_range[0], self.grid.x_range[1], self.grid.y_range[0], self.grid.y_range[1], duration, max_intensity);
 
         if cfg!(target_os = "windows") {
             Command::new("cmd")
@@ -352,8 +366,8 @@ impl Rays {
         }
     } // Initialisation function to define the initial size of the fields in Rays.
     
-    fn bound_angles(&mut self) {
-        for i in 0..self.angle.len() {
+    fn bound_angles(&mut self, index_range: [usize;2]) {
+        for i in index_range[0]..index_range[1] {
 
             if self.angle[i] > PI/2.0 {
                 self.step_vector[i] = -1.0;
@@ -387,14 +401,15 @@ impl Rays {
             self.total_distance.extend(total_distance);
     } // Appends data of new rays to the vector fields under Rays.
 
-    fn step<F: SingleInputFunction>(&mut self, dt: f64, boundaries: &mut Vec<Boundary<F>>, simulation_x_limit: [f64;2], simulation_y_limit: [f64;2]) -> () {
+    fn step<F: SingleInputFunction>(&mut self, dt: f64, boundaries: &mut Vec<Boundary<F>>, simulation_x_limit: [f64;2], simulation_y_limit: [f64;2], init_max_intensity: f64) -> () {
         let mut new_x_pos: f64;
         let mut new_y_pos: f64;
         let mut i: usize = 0;
 
         while i != self.x_pos.len() {
             // Removes data if it leaves the simulation range
-            if (self.x_pos[i] < simulation_x_limit[0]) || (self.x_pos[i] > simulation_x_limit[1]) || (-self.y_pos[i] < simulation_y_limit[0])  || (-self.y_pos[i] > simulation_y_limit[1]) {
+            if (self.x_pos[i] < simulation_x_limit[0]) || (self.x_pos[i] > simulation_x_limit[1]) || (-self.y_pos[i] < simulation_y_limit[0]) ||
+                 (-self.y_pos[i] > simulation_y_limit[1]) || (self.intensity[i].is_finite() == false) || (self.intensity[i] < init_max_intensity / 10000000000.0) {
                 self.angle.remove(i);
                 self.x_pos.remove(i);
                 self.y_pos.remove(i);
@@ -405,16 +420,42 @@ impl Rays {
                 self.propagation_time.remove(i);
                 self.total_distance.remove(i);
             } else { 
-                let old_ray_speed = self.ray_speed(self.x_pos[i],self.y_pos[i], boundaries);
+                let (old_ray_speed, old_boundary) = self.ray_speed(self.x_pos[i],self.y_pos[i], boundaries);
 
                 // Caluclates the new position of each ray after 1 time step
                 self.propagation_time[i] += dt;
                 new_x_pos = self.x_pos[i] + self.step_vector[i] * dt * old_ray_speed * self.angle[i].sin();
                 new_y_pos = self.y_pos[i] + self.step_vector[i] * dt * old_ray_speed * self.angle[i].cos();
 
-                let new_ray_speed = self.ray_speed(new_x_pos, new_y_pos, boundaries);
+                let (new_ray_speed, new_boundary) = self.ray_speed(new_x_pos, new_y_pos, boundaries);
 
-                // Implement some if statement around here for reflection with boundary.
+                let material_change_test = match (&old_boundary, &new_boundary) {
+                    (Some(location_1), Some(location_2)) => {
+                        if location_1.material != location_2.material { 1 }
+                        else { 0 }
+                    }
+                    (Some(_), None) => 2,
+                    (None, Some(_)) => 1,
+                    _ => 0
+                };
+
+                if material_change_test != 0 {
+                    let r_coeff: f64;
+                    let t_coeff: f64;
+                    if material_change_test == 1 { 
+                        self.reflection(new_boundary.clone().unwrap(), new_x_pos, new_y_pos, i); 
+                        (r_coeff, t_coeff) = self.reflection_and_transmission(old_boundary, new_boundary,
+                        old_ray_speed, new_ray_speed, i);
+                    } else { 
+                        self.reflection(old_boundary.clone().unwrap(), new_x_pos, new_y_pos, i);
+                        (r_coeff, t_coeff) = self.reflection_and_transmission(old_boundary, new_boundary,
+                        old_ray_speed, new_ray_speed, i);
+                    }
+                    *self.intensity.last_mut().unwrap() *= r_coeff;
+                    self.intensity[i] *= t_coeff;
+                }
+
+                
                 if new_ray_speed > old_ray_speed {
                     let critical_angle : f64 = (old_ray_speed/new_ray_speed).asin();
                     // Reflects the ray if its angle with the normal exceeds the critical angle.
@@ -424,6 +465,7 @@ impl Rays {
                     }
                 }
 
+
                 let preangle = new_ray_speed / old_ray_speed * self.angle[i].sin();
 
 
@@ -431,12 +473,17 @@ impl Rays {
                 self.total_distance[i] += distance_travelled;
 
 
+
                 self.x_pos[i] = new_x_pos;
                 self.y_pos[i] = new_y_pos;
-                self.angle[i] = preangle.asin();
+                self.angle[i] = ( new_ray_speed / old_ray_speed * self.angle[i].sin() ).asin();
 
                 let salinity = 35.0;
-                self.intensity[i] = (1.0 - calculate_absorption(self.frequency[i], temperature_at_depth(self.y_pos[i]), salinity, self.y_pos[i])) * self.initial_intensity[i] * (1.0/(PI * 2.0 * self.total_distance[i]));
+
+                let temperature = self.temperature_at_depth(self.y_pos[i]);
+                //self.intensity[i] *= 1.0 - self.calculate_absorption(self.frequency[i], temperature, salinity, self.y_pos[i]);
+
+                self.intensity[i] = (1.0 - self.calculate_absorption(self.frequency[i], temperature, salinity, self.y_pos[i])) * self.initial_intensity[i] * (1.0/(PI * 2.0 * self.total_distance[i]));
 
                 i += 1;
             }
@@ -447,8 +494,9 @@ impl Rays {
         2.0 * PI * self.frequency[index] * self.propagation_time[index]
     }
 
-    fn ray_speed<F: SingleInputFunction>(&mut self, x_pos: f64, y_pos: f64, boundaries: &mut Vec<Boundary<F>>) -> f64 {
+    fn ray_speed<F: SingleInputFunction>(&mut self, x_pos: f64, y_pos: f64, boundaries: &mut Vec<Boundary<F>>) -> (f64, Option<Boundary<F>>) {
         let mut current_boundary: Option<usize> = None;
+        let mut boundary_height: Option<f64> = None;
         let velocity_air: f64 = 343.0; // m s^-1
         let ycase: u32;
 
@@ -485,8 +533,12 @@ impl Rays {
                     if let Some(height) = valid_boundaries[i].boundary_height(x_pos) {
                         if height > -y_pos && i != valid_boundaries.len() {
                             current_boundary = Some(i);
+                            boundary_height = Some(height);
                             break;
-                        } else if i == valid_boundaries.len() { current_boundary = Some(valid_boundaries.len()) }
+                        } else if i == valid_boundaries.len() { 
+                            current_boundary = Some(valid_boundaries.len());
+                            boundary_height = valid_boundaries[current_boundary.unwrap()].boundary_height(x_pos);
+                        }
                     }
                 }
             } 
@@ -499,11 +551,145 @@ impl Rays {
         }
 
         match ycase{
-            1=>velocity_water(y_pos),
-            2=>velocity_air,
-            _=>valid_boundaries[current_boundary.unwrap()].material.calculate_velocity(-y_pos),
+            1=>(self.velocity_water(-y_pos), None),
+            2=>(velocity_air, None),
+            _=>(valid_boundaries[current_boundary.unwrap()].material.calculate_velocity(-y_pos - boundary_height.unwrap()), 
+                Some( valid_boundaries[current_boundary.unwrap()].clone() )),
         }
     }
+
+    fn reflection<F: SingleInputFunction>(&mut self, mut boundary: Boundary<F>, new_x_pos: f64, new_y_pos: f64, ray_index: usize) -> () {
+        let delta_x = new_x_pos - self.x_pos[ray_index];
+        let delta_y = new_y_pos - self.y_pos[ray_index];
+        let slope = boundary.differentiate(new_x_pos);
+        let normal = -slope.powi(-1);
+        let reflected_angle: f64;
+        let step_vector: f64;
+
+        const TOLERANCE: f64 = 0.75;
+
+        if normal.is_infinite() { 
+            reflected_angle = - self.angle[ray_index];
+            step_vector = - self.step_vector[ray_index]
+        } else if normal.is_nan() {
+            reflected_angle = self.angle[ray_index];
+            step_vector = -1.0 * self.step_vector[ray_index]
+        } else {
+            let dot_product = delta_x + delta_y * normal;
+
+            let new_delta_x = delta_x - 2.0 * dot_product;
+            let new_delta_y = delta_y - 2.0 * dot_product * normal;
+
+            reflected_angle = ( new_delta_x / new_delta_y ).atan();
+            step_vector = self.step_vector[ray_index]
+        }
+
+        if (reflected_angle - slope.atan()).abs() > TOLERANCE {
+            self.create_rays(vec![reflected_angle], vec![self.x_pos[ray_index]], vec![self.y_pos[ray_index]],
+                vec![self.intensity[ray_index]], vec![self.frequency[ray_index]], vec![step_vector],vec![self.total_distance[ray_index]]);
+
+            self.bound_angles([self.x_pos.len(), self.x_pos.len()]);
+        }
+    }
+
+    fn reflection_and_transmission<F: SingleInputFunction>(&mut self, material_1: Option<Boundary<F>>, material_2: Option<Boundary<F>>, old_speed: f64, new_speed: f64, ray_index: usize) -> (f64, f64) {
+        let z1: f64;
+        let z2: f64;
+        if let Some(boundary_1) = material_1 { 
+            z1 = self.acoustic_impedance(ImpedenceInput::Material(boundary_1.material),old_speed, boundary_1.boundary_height(self.x_pos[ray_index]), ray_index);
+        }
+        else {
+            let density: f64;
+            if self.y_pos[ray_index] > 0.0 { density = 1.293 }
+            else { density = self.density_water(ray_index) }
+            z1 = self.acoustic_impedance(ImpedenceInput::Density(density), old_speed, None, ray_index);
+        }
+        if let Some(boundary_2) = material_2 { 
+            z2 = self.acoustic_impedance(ImpedenceInput::Material(boundary_2.material),new_speed, boundary_2.boundary_height(self.x_pos[ray_index]), ray_index); 
+        }
+        else {
+            let density: f64;
+            if self.y_pos[ray_index] > 0.0 { density = 1.293 }
+            else { density = self.density_water(ray_index) }
+            z2 = self.acoustic_impedance(ImpedenceInput::Density(density), new_speed, None, ray_index);
+        }
+    
+        let r_coeff = ((z2 * (self.angle[ray_index]).cos()) - (z1 * (self.angle[ray_index]).cos())) / ((z2 * (self.angle[ray_index]).cos()) + (z1*(self.angle[ray_index]).cos()));
+        let t_coeff = 1.0 - r_coeff;
+    
+        (r_coeff, t_coeff)
+    }
+
+    fn acoustic_impedance(&mut self, input: ImpedenceInput, speed_of_sound: f64, boundary_height: Option<f64>, ray_index: usize) -> f64 {
+        match input {
+            ImpedenceInput::Material(material) => material.clone().acoustic_impedance(speed_of_sound, self.y_pos[ray_index], boundary_height.unwrap()),
+            ImpedenceInput::Density(density) => density * speed_of_sound
+        }
+    }
+
+    //                                                  MARK: Water Properties
+
+    fn velocity_water(&mut self, depth:f64) -> f64 {
+        let salinity: f64=22.0;
+        let latitude: f64=43.0;
+        let temp: f64 = self.temperature_at_depth(depth);
+    
+        let speed: f64= 1402.5+5.0*temp-5.44e-2*temp.powi(2)+2.1e-4*temp.powi(2)+1.33*salinity-1.23e-2*salinity*temp+8.7e-5*salinity*temp.powi(2)+1.56e-2*depth+2.55e-7*depth.powi(2)-7.3e-12*depth.powi(3)+1.2e-6*depth*(latitude-45.0)-9.5e-13*temp*depth.powi(3)+3e-7*temp.powi(2)*depth+1.43e-5*salinity*depth;
+        speed
+    }
+
+    fn density_water(&mut self, ray_index: usize) -> f64 {
+        let temperature = self.temperature_at_depth(self.y_pos[ray_index]);
+        999.974950 * (1.0 - (temperature - 3.983035).powi(2) * (temperature + 301.797) / (522528.9) * (temperature + 69.34881) )
+    }
+
+    fn temperature_at_depth(&mut self, depth: f64) -> f64 {
+    
+        let surface_temp: f64 = 20.0;  // degrees C
+        let bottom_temp:f64 = 4.0;  // degrees C
+        let thermocline_start:f64 = 200.0;  // metres //temp is constant from 0-200m
+        let thermocline_end:f64 = 1000.0;  // metres
+    
+      //constant temperature up to 200m based on literature - thermocline start depth
+        if depth <= thermocline_start {
+            surface_temp
+        } else if depth >= thermocline_end {
+            bottom_temp
+        } else {
+            // Linear interpolation within the thermocline
+            let fraction = (depth - thermocline_start) / (thermocline_end - thermocline_start);
+            surface_temp + fraction * (bottom_temp - surface_temp)
+        }
+    }
+    
+    
+    // function to caculate absorption coefficient in seawater
+    fn calculate_absorption(&mut self, f: f64, temp: f64, salinity: f64, ddepth: f64, ) -> f64 {
+    
+        let ph: f64  = 8.0;
+       
+        let z: f64 = 10.0; // just a constant
+    
+        let depth = ddepth / 1000.0;
+    
+        let f1 = 0.91 * (salinity / 35.0).sqrt() * (temp/33.0).exp();
+        let f2 = 46.0 * (temp/18.0).exp();
+    
+        //Boric acid contribution
+        let a = 0.101 * ((f1 * f.powi(2)) / (f1.powi(2) + f.powi(2))) * ((ph - 8.0) / 0.57).exp();
+        //Magnesium Sulfate contribtion
+        let b = 0.56 * (1.0 + (temp / 76.0)) * (salinity / 35.0) * ((f2 * f.powi(2)) / (f2.powi(2) + f.powi(2))) * (-depth / 4.9).exp();
+        //Pure water contribution
+        let c = (0.0004937-(2.59 *  z.powf(-5.0)) * temp + 9.11 * z.powf(-7.0) * temp.powi(2) -1.5010 * z.powf(-8.0) * temp.powi(3)) * ((1.0-((3.38 * z.powf(-2.0)) * depth) + (4.9 * z.powf(-4.0) * depth.powi(2))))* f.powi(2);
+        //let c = 0.00049 * f.powi(2) * e.powf(-(temp / 27.0 + depth / 17.0));
+    
+        (a + b + c) / 1000.0 //dB/m
+    }
+}
+
+enum ImpedenceInput {
+    Material(Material),
+    Density(f64),
 }
 
 //                                                  MARK: Boundary Struct
@@ -570,6 +756,22 @@ impl<F: SingleInputFunction> Boundary<F> {
 
         Some(y_boundary)
     }
+
+    pub fn differentiate(&mut self, x_pos: f64) -> f64 {
+        let h = 0.0000001;
+        let mut result: f64 = f64::NAN;
+        if let Some(next_height) = self.boundary_height( x_pos + h / 2.0 ) {
+            if let Some(prior_height) = self.boundary_height( x_pos - h / 2.0 ) {
+                result = (next_height - prior_height) / h;
+            } else {
+                result = (next_height - self.boundary_height(x_pos).unwrap()) / h;
+            }
+        } else if let Some(prior_height) = self.boundary_height( x_pos - h / 2.0 ) {
+            result = (self.boundary_height(x_pos).unwrap() - prior_height) / h;
+        }
+        result
+    } 
+ 
 }
 
 impl<F: SingleInputFunction + Clone> Clone for Boundary<F> {
@@ -666,63 +868,5 @@ impl Grid {
         (x_positions, y_positions, intensities)
         // Return a tuple containing the vectors of x positions, y positions, intensities
     }
-}
-
-fn velocity_water(depth:f64) -> f64 {
-    let salinity: f64=22.0;
-    let latitude: f64=43.0;
-    let temp: f64 = temperature_at_depth(depth);
-
-    let speed: f64= 1402.5+5.0*temp-5.44e-2*temp*temp+2.1e-4*temp*temp+1.33*salinity-1.23e-2*salinity*temp+8.7e-5*salinity*temp*temp+1.56e-2*depth+2.55e-7*depth*depth-7.3e-12*depth*depth*depth+1.2e-6*depth*(latitude-45.0)-9.5e-13*temp*depth*depth*depth+3e-7*temp*temp*depth+1.43e-5*salinity*depth;
-speed
-}
-
-fn temperature_at_depth(depth: f64) -> f64 {
-    
-    let surface_temp: f64 = 20.0;  // degrees C
-    let bottom_temp:f64 = 4.0;  // degrees C
-    let thermocline_start:f64 = 200.0;  // metres //temp is constant from 0-200m
-    let thermocline_end:f64 = 1000.0;  // metres
-
-  //constant temperature up to 200m based on literature - thermocline start depth
-    if depth <= thermocline_start {
-        surface_temp
-    } else if depth >= thermocline_end {
-        bottom_temp
-    } else {
-        // Linear interpolation within the thermocline
-        let fraction = (depth - thermocline_start) / (thermocline_end - thermocline_start);
-        surface_temp + fraction * (bottom_temp - surface_temp)
-    }
-}
-
-
-// function to caculate absorption coefficient in seawater
-fn calculate_absorption(f: f64, temp: f64, salinity: f64, ddepth: f64, ) -> f64 {
-
-    let ph: f64  = 8.0;
-   
-    let z: f64 = 10.0; // just a constant
-
-    let depth = ddepth / 1000.0;
-
-
-    let f1 = 0.91 * (salinity / 35.0).sqrt() * (temp/33.0).exp();
-    let f2 = 46.0 * (temp/18.0).exp();
-
-    //Boric acid contribution
-    let a = 0.101 * ((f1 * f.powi(2)) / (f1.powi(2) + f.powi(2))) * ((ph - 8.0) / 0.57).exp();
-    //Magnesium Sulfate contribtion
-    let b = 0.56 * (1.0 + (temp / 76.0)) * (salinity / 35.0) * ((f2 * f.powi(2)) / (f2.powi(2) + f.powi(2))) * (-depth / 4.9).exp();
-    //Pure water contribution
-    let c = (0.0004937-(2.59 *  z.powf(-5.0)) * temp + 9.11 * z.powf(-7.0) * temp.powi(2) -1.5010 * z.powf(-8.0) * temp.powi(3)) * ((1.0-((3.38 * z.powf(-2.0)) * depth) + (4.9 * z.powf(-4.0) * depth.powi(2))))* f.powi(2);
-    //let c = 0.00049 * f.powi(2) * e.powf(-(temp / 27.0 + depth / 17.0));
-
-
-
-    (a + b + c) / 1000.0 //dB/m
-
-
-    
 }
 
