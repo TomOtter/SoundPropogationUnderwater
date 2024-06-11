@@ -67,7 +67,21 @@ my_simulation.add_boundary(
 Our library comes with a large selection of MaterialTypes, such as: 
 
 - **Stone Materials:** Basalt, Granite, Quartzite, Gneiss, Schist, Marble, Limestone, Shale, Sandstone
-- **Other Materials:** TurbiditeArea, SiliceousSediment, CalcerousSediment, Sand
+- **Other Materials:** TurbiditeArea, SiliceousSediment, CalcerousSediment, Sand, water
+
+Each material type has a specified speed of sound which is constant for the sand and stone materials, and for the other materials it is dependent on variable parameters. The sound of speed equations and values for each material are given by,
+- Water: 
+- Turbidite Areas: V_{p}=1.511+1.304D−0.741D^2+0.257D^3
+- Siliceous Sediment: V_{p}=1.509+0.869D−0.267D^2
+- Calcareous Sediment:V_{p}=1.559+1.713D−0.374D^2
+where D = depth (m), 
+- Sand:~1626 ms^{-1}
+- Stone Materials:
+V_p=√((K_s+4/3 G)∕ρ) 
+where K_s=E/3(1-2ν) and G=E/2(1+ν)
+where K_s=Bulk Modulus, G=Shear Modulus, ρ=density (kgms^{-1}), v=Poisson Ratio and E=Young^' s Modulus(GPa). 
+
+The water equation was obtained from [1], the marine sediment equations were obtained from [2], the sand speed was obtained from [3] and the general material equation was obtained from [4] where all densities, Bulk moduli and shear moduli were obtained from [5][6][7][8]. 
 
 To write your function, you must first specify that it is of type fn(f64) -> f64 and then your singular input parameter |x: f64| followed by an expression. For a boundary shape of y = x<sup>2</sup>, you would lay it out as: |x: f64| x.powi(2).
 
@@ -188,5 +202,16 @@ The rays are propagated outwards from these sources for 2.0 s and their componen
 The simulation is contained between &plusmn; 1500.0 in the x-axis and between 1000.0 and -2000.0 in the y-axis. Data points are also set to interact if they are within squares of size 5.0 in both height and width.
 
 <h3> Output</h3>
+
+<h4> References </h4>
+[1]Leroy, C. C., Robinson, S. P. and Goldsmith, M. J. Erratum: “A new equation for the accurate calculation of sound speed in all oceans” [J. 
+Acoust. Soc. Am. 124(5), 2774-2783 (2008)] J. Acoust. Soc. Am. 126 (4), p2117, October 2009 
+[2] Hamilton EL. Sound velocity gradients in marine sediments. The Journal of the Acoustical Society of America. 1979 Apr;65(4):909–22.
+[3]Maguer A, Bovio E, Fox WLJ, Schmidt H. In situ estimation of sediment sound speed and critical angle. The Journal of the Acoustical Society of America. 2000;108(3):987.
+[4] Wang W, Xu Y, Sun D, Ni S, Wentzcovitch R, Wu Z. Velocity and density characteristics of subducted oceanic crust and the origin of lower-mantle heterogeneities. Nature Communications [Internet]. 2020 Jan 7 [cited 2022 May 2];11(1):64. Available from: https://www.nature.com/articles/s41467-019-13720-2
+[5] Amadei B. DEFORMABILITY PROPERTIES OF ROCKS AND ROCK MASSES [Internet]. 2024 [cited 2024 May 15]. Available from: https://ceae.colorado.edu/~amadei/CVEN5768/PDF/NOTES5.pdf
+[6] Vilen A. Gravel weight and volume calculators [Internet]. www.aqua-calc.com. 2022 [cited 2024 May 15]. Available from: https://www.aqua-calc.com/page/gravel-calculators
+[7] Hamdan M. Density of Construction Materials - Table [Internet]. matmake.com. 2024 [cited 2024 May 15]. Available from: https://matmake.com/properties/density-of-construction-materials.html
+[8] Akinyemi OD, Alabi AA, Ojo AI, Adewusi OE. Characterization of Density and Porosity of Rocks Samples from Ogun State of Nigeria. Earth Science Research. 2012 Jun 19;1(2).
 
 ![Visualization of code](/SoundProp/outputImages/imageGif.gif)
